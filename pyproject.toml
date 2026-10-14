@@ -1,0 +1,46 @@
+[project]
+name = "transcript2bpmn"
+version = "0.1.0"
+description = "Convert meeting transcripts into BPMN 2.0 process maps"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.20.0",
+    "arq>=0.28.0",
+    "fastapi>=0.143.0",
+    "litellm>=1.105.1",
+    "psycopg[binary]>=3.3.6",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.15.0",
+    "pyyaml>=6.0.3",
+    "sqlalchemy>=2",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+    "types-pyyaml>=6.0.12.20260906",
+]
+
+[tool.ruff]
+line-length = 110
+extend-exclude = ["app/db/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["app/db/migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["litellm", "litellm.*", "arq", "arq.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
