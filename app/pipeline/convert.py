@@ -77,17 +77,21 @@ class Layout:
 
 
 def _clean(model: ProcessModel) -> tuple[list[tuple[str, str]], list[Node], list[Flow]]:
-    """Make the model drawable: unknown lanes -> 'Unassigned', dangling flows dropped.
+    """Make any model drawable as valid XML: duplicate ids dropped (first wins), unknown
+    lanes -> 'Unassigned', dangling flows dropped.
 
-    Real validation + repair is Phase 3; this only guarantees well-formed output.
+    validate.py reports these problems; this only guarantees the XML stays well-formed even
+    when the repair loop couldn't fix them.
     """
-    lanes = [(lane.id, lane.name) for lane in model.lanes]
+    lanes = list({lane.id: (lane.id, lane.name) for lane in reversed(model.lanes)}.values())[::-1]
     lane_ids = {lid for lid, _ in lanes}
-    nodes = [n if n.lane_id in lane_ids else n.model_copy(update={"lane_id": UNASSIGNED_LANE}) for n in model.nodes]
-    if any(n.lane_id == UNASSIGNED_LANE for n in nodes):
+    unique_nodes = list({n.id: n for n in reversed(model.nodes)}.values())[::-1]
+    nodes = [n if n.lane_id in lane_ids else n.model_copy(update={"lane_id": UNASSIGNED_LANE}) for n in unique_nodes]
+    if any(n.lane_id == UNASSIGNED_LANE for n in nodes) and UNASSIGNED_LANE not in lane_ids:
         lanes.append((UNASSIGNED_LANE, "Unassigned"))
     node_ids = {n.id for n in nodes}
-    flows = [f for f in model.flows if f.source_id in node_ids and f.target_id in node_ids]
+    unique_flows = list({f.id: f for f in reversed(model.flows)}.values())[::-1]
+    flows = [f for f in unique_flows if f.source_id in node_ids and f.target_id in node_ids]
     return lanes, nodes, flows
 
 
@@ -135,50 +139,90 @@ def _columns(nodes: list[Node], flows: list[Flow]) -> tuple[dict[str, int], set[
     return col, back
 
 
-def layout(model: ProcessModel) -> Layout:
+# node id -> (lane id, x, y offset from the lane's top). Lane-relative y survives lanes
+# being added, removed or resized above it.
+KeptPositions = dict[str, tuple[str, float, float]]
+
+
+def layout(model: ProcessModel, keep: KeptPositions | None = None) -> Layout:
+    """Lay out the model. Nodes in `keep` that are still in the same lane stay where they
+    were (e.g. where the user dragged them); everything else gets the computed position."""
     lanes, nodes, flows = _clean(model)
-    col, back = _columns(nodes, flows)
+    col, _ = _columns(nodes, flows)
+    keep = {nid: k for nid, k in (keep or {}).items() if any(n.id == nid and n.lane_id == k[0] for n in nodes)}
 
     cells: dict[tuple[str, int], list[Node]] = defaultdict(list)
     for n in nodes:
         cells[(n.lane_id, col[n.id])].append(n)
-    rows = {lid: max([len(v) for (l2, _), v in cells.items() if l2 == lid], default=1) for lid, _ in lanes}
+    rows: dict[str, float] = {
+        lid: max([len(v) for (l2, _), v in cells.items() if l2 == lid], default=1) for lid, _ in lanes
+    }
 
-    ncols = max(col.values(), default=0) + 1
-    pool_w = POOL_LABEL_W + 2 * PAD_X + ncols * COL_W
-    lane_boxes: dict[str, Box] = {}
+    min_x = ORIGIN_X + POOL_LABEL_W + 10
+    for n in nodes:  # lanes grow to fit kept nodes
+        if n.id in keep:
+            h = SIZE.get(n.type, TASK_SIZE)[1]
+            rows[n.lane_id] = max(rows[n.lane_id], (keep[n.id][2] + h + 20) / ROW_H)
+
+    lane_tops: dict[str, float] = {}
     y = float(ORIGIN_Y)
     for lid, _ in lanes:
-        h = rows[lid] * ROW_H
-        lane_boxes[lid] = Box(ORIGIN_X + POOL_LABEL_W, y, pool_w - POOL_LABEL_W, h)
-        y += h
-    pool = Box(ORIGIN_X, ORIGIN_Y, pool_w, y - ORIGIN_Y)
+        lane_tops[lid] = y
+        y += rows[lid] * ROW_H
 
     boxes: dict[str, Box] = {}
+    for n in nodes:
+        if n.id in keep:
+            w, h = SIZE.get(n.type, TASK_SIZE)
+            _, x, dy = keep[n.id]
+            boxes[n.id] = Box(max(x, min_x), lane_tops[n.lane_id] + max(dy, 0), w, h)
     for (lid, c), members in cells.items():
         for row, n in enumerate(members):
+            if n.id in keep:
+                continue
             w, h = SIZE.get(n.type, TASK_SIZE)
             cx = ORIGIN_X + POOL_LABEL_W + PAD_X + c * COL_W + COL_W / 2
-            cy = lane_boxes[lid].y + row * ROW_H + ROW_H / 2
-            boxes[n.id] = Box(cx - w / 2, cy - h / 2, w, h)
+            cy = lane_tops[lid] + row * ROW_H + ROW_H / 2
+            box = Box(cx - w / 2, cy - h / 2, w, h)
+            # ponytail: new nodes just slide right past kept ones they'd overlap; a real
+            # incremental layout would reflow neighbours.
+            while any(_overlaps(box, boxes[o.id]) for o in nodes if o.id in boxes and o.lane_id == lid):
+                box.x += COL_W
+            boxes[n.id] = box
 
-    edges: dict[str, list[tuple[float, float]]] = {}
-    for f in flows:
-        s, t = boxes[f.source_id], boxes[f.target_id]
-        if f.id in back:  # loop back underneath
-            low = max(s.y + s.h, t.y + t.h) + 20
-            edges[f.id] = [(s.cx, s.y + s.h), (s.cx, low), (t.cx, low), (t.cx, t.y + t.h)]
-        elif abs(s.cy - t.cy) < 1:
-            edges[f.id] = [(s.x + s.w, s.cy), (t.x, t.cy)]
-        else:
-            mid = (s.x + s.w + t.x) / 2
-            edges[f.id] = [(s.x + s.w, s.cy), (mid, s.cy), (mid, t.cy), (t.x, t.cy)]
+    right = max((b.x + b.w for b in boxes.values()), default=0)
+    pool_w = max(POOL_LABEL_W + 2 * PAD_X + (max(col.values(), default=0) + 1) * COL_W, right + PAD_X - ORIGIN_X)
+    lane_boxes = {
+        lid: Box(ORIGIN_X + POOL_LABEL_W, lane_tops[lid], pool_w - POOL_LABEL_W, rows[lid] * ROW_H) for lid, _ in lanes
+    }
+    pool = Box(ORIGIN_X, ORIGIN_Y, pool_w, y - ORIGIN_Y)
+    edges = {f.id: _route(boxes[f.source_id], boxes[f.target_id]) for f in flows}
     return Layout(pool, lane_boxes, boxes, edges)
 
 
-def to_bpmn(model: ProcessModel) -> bytes:
+def _overlaps(a: Box, b: Box, gap: float = 20) -> bool:
+    return a.x < b.x + b.w + gap and b.x < a.x + a.w + gap and a.y < b.y + b.h + gap and b.y < a.y + a.h + gap
+
+
+def _route(s: Box, t: Box) -> list[tuple[float, float]]:
+    """Orthogonal waypoints. Targets to the left (loops, user-moved nodes) go underneath."""
+    if t.x < s.x + s.w and s.x < t.x + t.w and (t.y >= s.y + s.h or s.y >= t.y + t.h):  # stacked vertically
+        down = t.y >= s.y + s.h
+        sy, ty = (s.y + s.h, t.y) if down else (s.y, t.y + t.h)
+        mid = (sy + ty) / 2
+        return [(s.cx, sy), (s.cx, mid), (t.cx, mid), (t.cx, ty)]
+    if t.x < s.x + s.w:
+        low = max(s.y + s.h, t.y + t.h) + 20
+        return [(s.cx, s.y + s.h), (s.cx, low), (t.cx, low), (t.cx, t.y + t.h)]
+    if abs(s.cy - t.cy) < 1:
+        return [(s.x + s.w, s.cy), (t.x, t.cy)]
+    mid = (s.x + s.w + t.x) / 2
+    return [(s.x + s.w, s.cy), (mid, s.cy), (mid, t.cy), (t.x, t.cy)]
+
+
+def to_bpmn(model: ProcessModel, keep: KeptPositions | None = None) -> bytes:
     lanes, nodes, flows = _clean(model)
-    geo = layout(model)
+    geo = layout(model, keep)
 
     defs = etree.Element(
         _q(BPMN, "definitions"),

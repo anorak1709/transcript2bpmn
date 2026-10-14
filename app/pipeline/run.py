@@ -1,25 +1,25 @@
-"""The full pipeline: file bytes -> segments -> ProcessModel -> BPMN XML."""
+"""The full pipeline: file bytes -> segments -> ProcessModel (validated/repaired) -> BPMN XML."""
 
 from pathlib import Path
 
 from app.llm.provider import LiteLLMProvider, LLMProvider
 from app.models.process import ProcessModel
 from app.models.transcript import Segment
-from app.pipeline import convert, extract, ingest, normalize
+from app.pipeline import convert, extract, ingest, normalize, validate
 
 
-def transcript_to_model(filename: str, data: bytes, llm: LLMProvider) -> tuple[list[Segment], ProcessModel]:
-    segments = normalize.normalize(ingest.parse(filename, data))
-    return segments, extract.extract(llm, segments)
+def model_from_segments(segments: list[Segment], llm: LLMProvider) -> validate.RepairResult:
+    return validate.repair(llm, extract.extract(llm, segments), segments)
 
 
-def model_to_bpmn(model: ProcessModel) -> str:
-    xml = convert.to_bpmn(model)
+def model_to_bpmn(model: ProcessModel, keep: convert.KeptPositions | None = None) -> str:
+    """BPMN XML is always derived from the model; it never goes out without passing the XSD."""
+    xml = convert.to_bpmn(model, keep)
     convert.validate_xsd(xml)
     return xml.decode()
 
 
-def eval_pipeline(transcript: Path) -> ProcessModel:
+def eval_pipeline(transcript: Path) -> validate.RepairResult:
     """Entry point for eval/run_eval.py. Uses the env-configured LLM."""
-    _, model = transcript_to_model(transcript.name, transcript.read_bytes(), LiteLLMProvider())
-    return model
+    segments = normalize.normalize(ingest.parse(transcript.name, transcript.read_bytes()))
+    return model_from_segments(segments, LiteLLMProvider())

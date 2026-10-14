@@ -36,6 +36,9 @@ class Node(_Strict):
     lane_id: str
     source_segment_ids: list[str]
     confidence: float = Field(ge=0, le=1)
+    # True for nodes a person added in the editor: no transcript source, confidence 1.0.
+    # Extraction always returns False. Defaulted so maps stored before this field still load.
+    user_added: bool = False
 
 
 class Flow(_Strict):

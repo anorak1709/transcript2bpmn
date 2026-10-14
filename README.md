@@ -5,16 +5,16 @@ Converts English meeting transcripts into BPMN 2.0 process maps (Camunda/Signavi
 **Core rule:** the LLM never writes BPMN XML. It extracts a typed `ProcessModel`
 (`app/models/process.py`); deterministic code validates it and converts it to BPMN.
 
-Status: **Phase 2**: text transcripts (.vtt/.srt/.txt/.docx) and audio recordings
-(.mp3/.m4a/.wav/.webm/.mp4) → BPMN XML, rendered in a read-only viewer. Not yet built:
-validation/repair and editing (Phase 3), multi-meeting merge (Phase 4).
+Status: **Phase 3**: text and audio → validated BPMN, editable in the browser (visual
+editor + chat), with version history and undo. Not yet built: multi-meeting merge,
+auth/multi-tenancy, exports (Phase 4).
 
 ## Pipeline
 
 ```
-upload ─► ingest ─► normalize ─► extract (filter pass, extract pass) ─► convert ─► XSD check
-          parse     fillers,     LLM "filter" role  LLM "extract" role   lxml +
-          file      merge,       drops chatter      → ProcessModel       layout
+upload ─► ingest ─► normalize ─► extract (filter, extract) ─► validate/repair ─► convert ─► XSD check
+          parse     fillers,     LLM "filter" + "extract"     graph checks;       lxml +
+          file      merge,       → ProcessModel               LLM "repair" ≤2x    layout
                     ids s1..sN
 ```
 
@@ -30,6 +30,15 @@ upload ─► ingest ─► normalize ─► extract (filter pass, extract pass)
   eval reports stay comparable. Invented citation ids are dropped; a node left uncited
   borrows its neighbours' citations with confidence halved, so every node cites ≥1 real segment.
 - **Transcribe** (`app/pipeline/transcribe/`, audio only): see *Audio* below.
+- **Validate/repair** (`validate.py`): deterministic checks, each returning
+  `{code, message, node_ids}`: `DUPLICATE_ID`, `INVALID_LANE`, `DANGLING_FLOW`,
+  `NO_START_EVENT`, `MULTIPLE_START_EVENTS` (one per lane is allowed), `NO_END_EVENT`,
+  `ORPHAN_NODE`, `UNREACHABLE`, `DEAD_END`, `GATEWAY_NO_BRANCH`, `MISSING_CONDITION`.
+  On errors, the model, the errors and the source segments of the affected nodes go to the
+  LLM ("repair" role, `prompts/repair_v1.md`), up to 2 attempts. The version with the fewest
+  errors wins, and anything still wrong becomes an OpenQuestion ("Needs review (CODE): …").
+  It never fails the job. Repair calls carry `repair_attempt` + `error_codes` as Langfuse
+  metadata, and the eval report gets *repair attempts* / *unresolved errors* columns.
 - **Convert** (`convert.py`): see *Layout* below. Output is validated against the official
   OMG BPMN 2.0 XSD (`app/pipeline/xsd/`) before it is stored.
 
@@ -40,15 +49,49 @@ upload ─► ingest ─► normalize ─► extract (filter pass, extract pass)
 | `POST /transcripts` (multipart `file`) | upload; stores raw file in S3/MinIO + row in Postgres |
 | `POST /transcripts/{id}/process` | enqueue the pipeline (arq); returns the job |
 | `GET /jobs/{id}` | `queued → (transcribing) → normalizing → extracting → converting → done \| failed` (+ `error`, `map_id`) |
-| `GET /maps/{id}` | `{model, bpmn_xml}`. The model is canonical; the XML is derived from it |
-| `GET /viewer/{map_id}` | read-only bpmn-js viewer + `.bpmn` download |
+| `GET /maps/{id}` | `{model, bpmn_xml, version, can_undo, errors, segments}`. The model is canonical; XML is derived |
+| `POST /maps/{id}/chat` `{instruction}` | LLM returns patch ops → applied → new version (`reply`, `ops` in response) |
+| `PUT /maps/{id}/bpmn` (body: BPMN XML) | save from the visual editor → parsed back into the model → new version |
+| `POST /maps/{id}/undo` | back one version (409 at v1) |
+| `GET /maps/{id}/versions` | history: version, source (extract/chat/visual), instruction |
+| `GET /editor/{map_id}` | bpmn-js editor (`/viewer/{id}` still works). `?select=<node_id>` deep-links a step |
 
 ```bash
 curl -F file=@eval/gold/01_invoice_approval/transcript.vtt localhost:8000/transcripts
 curl -X POST localhost:8000/transcripts/<id>/process
 curl localhost:8000/jobs/<job_id>          # until status=done
-open http://localhost:8000/viewer/<map_id>
+open http://localhost:8000/editor/<map_id>
 ```
+
+## Editing
+
+The **ProcessModel JSON is the source of truth**. BPMN XML is regenerated from it on every
+change and always passes the XSD before it's stored.
+
+- **Chat** (`app/pipeline/edit.py`): the LLM ("edit" role, `prompts/edit_v1.md`) returns typed
+  patch ops, never a whole model: `add_task`, `remove_node`, `rename_node`, `merge_tasks`,
+  `split_task`, `reassign_lane`, `add_lane`, `add_gateway`, `connect`, `disconnect`,
+  `set_condition`, `resolve_open_question`. They're applied deterministically and
+  all-or-nothing. If an op references something that doesn't exist, the LLM gets one retry
+  with the error; otherwise you get a 422. A reply that's only a clarifying question changes
+  nothing. Edits are validated (issues shown in the editor) but not auto-repaired, so a fix
+  never fights the user.
+- **Visual** (`app/pipeline/parse_bpmn.py`): the editor PUTs bpmn-js's saved XML. Elements
+  match the model by id (`Node_<id>`, `Lane_<id>`, `Flow_<id>`). Elements the editor
+  created get no citations, confidence 1.0 and `user_added: true`. Decision paths labelled
+  only by name become conditions. Elements the model can't represent (sub-processes,
+  intermediate events, inclusive gateways…) are rejected with 422, not dropped. The XML
+  parser has entities, DTDs and network disabled (no XXE).
+- **Versions & undo** (`app/maps.py`, `map_versions` table): every change is a version
+  with its source, and for chat its ops and instruction. Undo moves back one version; a new
+  edit after an undo discards the undone ones (a normal undo stack).
+- **Layout preservation:** before regenerating, node positions are read from the current
+  diagram (lane-relative y), so anything the user dragged stays put. New nodes get computed
+  positions and slide right past kept ones. Edge waypoints are always recomputed.
+- **Editor** (`app/static/editor.html`): bpmn-js Modeler. The side panel shows the selected
+  step's transcript quotes (speaker, timestamp, segment id) or "added by you", open questions
+  and validation issues (click to jump to the step), and a speaker warning for undiarized
+  audio. The chat box saves unsaved visual changes before sending.
 
 ## Audio
 
@@ -101,15 +144,16 @@ Instead, `convert.layout()` is a small lane-aware layout in Python:
 - y: lane band, in the model's lane order; nodes of one lane that share a column get sub-rows
 - orthogonal edge routing, fixed spacing
 
-Nodes referencing an unknown lane go to an "Unassigned" lane, and dangling flows are dropped.
-Real validation is Phase 3.
+As a last line of defence the converter also drops duplicate ids and dangling flows, and puts
+unknown-lane nodes in an "Unassigned" lane, so the XML stays valid even when validation
+problems are left unresolved.
 
 ## Manual Camunda Modeler check
 
 The XSD check is automated (`tests/test_convert.py`, `tests/test_integration.py`). Camunda
 Modeler is a manual check per release:
 
-1. Process a transcript, open `/viewer/<map_id>`, click **Download .bpmn**.
+1. Process a transcript, open `/editor/<map_id>`, click **Download .bpmn**.
 2. Open it in [Camunda Modeler](https://camunda.com/download/modeler/) (File → Open).
 3. Pass if it opens with no import warnings, lanes contain their tasks, and gateway
    condition labels show.
@@ -148,8 +192,9 @@ app/api/        FastAPI routers
 app/core/       settings (pydantic-settings), logging
 app/llm/        LLMProvider interface + LiteLLM implementation
 app/models/     ProcessModel schema
-app/pipeline/   ingest, transcribe/, normalize, extract, convert, run (validate: Phase 3)
-app/static/     viewer.html
+app/pipeline/   ingest, transcribe/, normalize, extract, validate, convert, edit, parse_bpmn, run
+app/static/     editor.html (bpmn-js Modeler)
+app/maps.py     map versions: create / commit / undo
 app/storage.py  S3/MinIO put/get
 app/db/         SQLAlchemy base + Alembic migrations
 app/workers/    arq worker settings

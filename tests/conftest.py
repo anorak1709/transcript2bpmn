@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
@@ -24,7 +24,9 @@ class FakeLLM(LLMProvider):
         self.noise = noise
         self.calls: list[tuple[ModelRole, str]] = []
 
-    def structured(self, prompt: str, input: str, schema: type[T], model_role: ModelRole) -> T:
+    def structured(
+        self, prompt: str, input: str, schema: type[T], model_role: ModelRole, metadata: dict[str, Any] | None = None
+    ) -> T:
         self.calls.append((model_role, input))
         if schema is RelevanceBatch:
             labels = []

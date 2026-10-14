@@ -7,7 +7,7 @@ from arq.connections import RedisSettings
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
-from app.api import health, pipeline
+from app.api import health, maps, pipeline
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 
@@ -26,8 +26,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="transcript2bpmn", lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(pipeline.router)
+app.include_router(maps.router)
 
 
-@app.get("/viewer/{map_id}", include_in_schema=False)
-def viewer(map_id: str) -> FileResponse:
-    return FileResponse(STATIC / "viewer.html")
+@app.get("/editor/{map_id}", include_in_schema=False)
+@app.get("/viewer/{map_id}", include_in_schema=False)  # Phase 1 links keep working
+def editor(map_id: str) -> FileResponse:
+    return FileResponse(STATIC / "editor.html")

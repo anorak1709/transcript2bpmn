@@ -16,8 +16,12 @@ T = TypeVar("T", bound=BaseModel)
 
 class LLMProvider(ABC):
     @abstractmethod
-    def structured(self, prompt: str, input: str, schema: type[T], model_role: ModelRole) -> T:
-        """Run `prompt` (instructions) over `input` and return a validated `schema` instance."""
+    def structured(
+        self, prompt: str, input: str, schema: type[T], model_role: ModelRole, metadata: dict[str, Any] | None = None
+    ) -> T:
+        """Run `prompt` (instructions) over `input` and return a validated `schema` instance.
+
+        `metadata` is attached to the trace (e.g. repair attempt number, error codes)."""
 
 
 class LiteLLMProvider(LLMProvider):
@@ -31,7 +35,9 @@ class LiteLLMProvider(LLMProvider):
         self.settings = settings or get_settings()
         _enable_tracing(self.settings)
 
-    def structured(self, prompt: str, input: str, schema: type[T], model_role: ModelRole) -> T:
+    def structured(
+        self, prompt: str, input: str, schema: type[T], model_role: ModelRole, metadata: dict[str, Any] | None = None
+    ) -> T:
         s = self.settings
         kwargs: dict[str, Any] = {}
         if s.llm_api_base:
@@ -52,7 +58,7 @@ class LiteLLMProvider(LLMProvider):
                     "strict": True,
                 }
             },
-            metadata={"model_role": model_role},
+            metadata={"model_role": model_role, **(metadata or {})},
             **kwargs,
         )
         assert isinstance(resp, ResponsesAPIResponse)  # sync, non-streaming call

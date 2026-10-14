@@ -6,10 +6,11 @@ from typing import Any
 
 from app import storage
 from app.db.base import SessionLocal
-from app.db.models import Job, ProcessMap, Transcript
+from app.db.models import Job, Transcript
 from app.llm.provider import LiteLLMProvider, LLMProvider
-from app.pipeline import extract, ingest, normalize
-from app.pipeline.run import model_to_bpmn
+from app.maps import create_map
+from app.pipeline import ingest, normalize
+from app.pipeline.run import model_from_segments
 from app.pipeline.transcribe import AUDIO_EXTENSIONS, Transcriber, get_transcriber
 
 log = logging.getLogger(__name__)
@@ -43,12 +44,10 @@ def run_job(job_id: str, llm: LLMProvider | None = None, transcriber: Transcribe
             transcript.segments = [s.model_dump() for s in segments]
 
             stage("extracting")
-            model = extract.extract(llm or LiteLLMProvider(), segments)
+            model = model_from_segments(segments, llm or LiteLLMProvider()).model  # extract + validate/repair
 
             stage("converting")
-            pmap = ProcessMap(transcript_id=transcript.id, model=model.model_dump(), bpmn_xml=model_to_bpmn(model))
-            db.add(pmap)
-            db.flush()
+            pmap = create_map(db, transcript.id, model)
             job.map_id = pmap.id
             stage("done")
         except Exception as e:

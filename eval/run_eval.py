@@ -23,9 +23,11 @@ from typing import Any
 import yaml
 
 from app.models.process import ProcessModel
+from app.pipeline.validate import RepairResult
 from eval.metrics import score
 
-Pipeline = Callable[[Path], ProcessModel]
+# A pipeline may return a bare model (stubs) or a RepairResult (real pipeline, adds repair stats).
+Pipeline = Callable[[Path], ProcessModel | RepairResult]
 METRICS = ("task_recall", "task_precision", "lane_accuracy", "gateway_recall", "flow_edge_f1")
 
 
@@ -43,7 +45,12 @@ def run_eval(pipeline: Pipeline, gold_dir: Path, threshold: float = 0.8) -> dict
         case: dict[str, Any] = {"case": case_dir.name, "meeting_type": meta.get("meeting_type")}
         try:
             gold = ProcessModel.model_validate_json((case_dir / "expected.json").read_text())
-            case["metrics"] = score(pipeline(transcript_path(case_dir)), gold, threshold)
+            out = pipeline(transcript_path(case_dir))
+            model = out.model if isinstance(out, RepairResult) else out
+            case["metrics"] = score(model, gold, threshold)
+            if isinstance(out, RepairResult):
+                case["repair_attempts"] = out.repair_attempts
+                case["unresolved_errors"] = [f"{e.code}: {e.message}" for e in out.unresolved_errors]
         except Exception:
             # One bad case must not sink the whole run; it's reported instead.
             case["error"] = traceback.format_exc()
@@ -55,19 +62,30 @@ def run_eval(pipeline: Pipeline, gold_dir: Path, threshold: float = 0.8) -> dict
         "cases": cases,
         "aggregate": {m: mean(c[m] for c in ok) for m in METRICS} if ok else {},
         "failed": sum("error" in c for c in cases),
+        "repair_attempts": sum(c.get("repair_attempts", 0) for c in cases),
+        "unresolved_errors": sum(len(c.get("unresolved_errors", [])) for c in cases),
     }
 
 
 def to_markdown(results: dict[str, Any], title: str) -> str:
     lines = [f"# Eval report: {title}", "", f"Fuzzy-match threshold: {results['threshold']}", ""]
-    lines += ["| case | type | " + " | ".join(METRICS) + " |", "|---" * (len(METRICS) + 2) + "|"]
+    extra = ("repair attempts", "unresolved errors")
+    lines += ["| case | type | " + " | ".join(METRICS + extra) + " |", "|---" * (len(METRICS) + 4) + "|"]
     for c in results["cases"]:
         cells = [f"{c['metrics'][m]:.2f}" for m in METRICS] if "metrics" in c else ["ERROR"] * len(METRICS)
+        cells += [
+            str(c.get("repair_attempts", "-")),
+            str(len(c["unresolved_errors"])) if "unresolved_errors" in c else "-",
+        ]
         lines.append(f"| {c['case']} | {c['meeting_type']} | " + " | ".join(cells) + " |")
     if results["aggregate"]:
         agg = [f"**{results['aggregate'][m]:.2f}**" for m in METRICS]
-        lines.append("| **mean** | | " + " | ".join(agg) + " |")
+        totals = [f"**{results['repair_attempts']}**", f"**{results['unresolved_errors']}**"]
+        lines.append("| **mean / total** | | " + " | ".join(agg + totals) + " |")
     lines += ["", f"Failed cases: {results['failed']}"]
+    for c in results["cases"]:
+        if c.get("unresolved_errors"):
+            lines += ["", f"## {c['case']} unresolved validation errors"] + [f"- {e}" for e in c["unresolved_errors"]]
     for c in results["cases"]:
         if "error" in c:
             lines += ["", f"## {c['case']} error", "```", c["error"].rstrip(), "```"]

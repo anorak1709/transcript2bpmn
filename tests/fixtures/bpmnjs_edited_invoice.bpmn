@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="transcript2bpmn" exporterVersion="0.1.0">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_1" name="Supplier invoice approval" processRef="Process_1" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_1" name="Supplier invoice approval" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_lane_ap" name="Accounts Payable">
+        <bpmn:flowNodeRef>Node_t_enter</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Node_t_match</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Node_g_match</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Node_t_return</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Node_end_returned</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Node_g_amount</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Node_t_ap_approve</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_0gufld4</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Node_start</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_lane_fin" name="Finance">
+        <bpmn:flowNodeRef>Node_t_fin_approve</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Node_g_join</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Node_t_pay</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Node_end_paid</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:userTask id="Node_t_enter" name="Enter invoice into ERP">
+      <bpmn:incoming>Flow_f1</bpmn:incoming>
+      <bpmn:outgoing>Flow_0jt0e2g</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Node_t_match" name="Match invoice to purchase order">
+      <bpmn:incoming>Flow_0hc6jvc</bpmn:incoming>
+      <bpmn:outgoing>Flow_f3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Node_g_match" name="Invoice matches PO?">
+      <bpmn:incoming>Flow_f3</bpmn:incoming>
+      <bpmn:outgoing>Flow_f4</bpmn:outgoing>
+      <bpmn:outgoing>Flow_f6</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Node_t_return" name="Return invoice to supplier">
+      <bpmn:incoming>Flow_f4</bpmn:incoming>
+      <bpmn:outgoing>Flow_f5</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="Node_end_returned" name="Invoice returned">
+      <bpmn:incoming>Flow_f5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="Node_g_amount" name="Amount over $5,000?">
+      <bpmn:incoming>Flow_f6</bpmn:incoming>
+      <bpmn:outgoing>Flow_f7</bpmn:outgoing>
+      <bpmn:outgoing>Flow_f8</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Node_t_fin_approve" name="Approve invoice (finance)">
+      <bpmn:incoming>Flow_f7</bpmn:incoming>
+      <bpmn:outgoing>Flow_f9</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Node_t_ap_approve" name="Approve invoice (AP)">
+      <bpmn:incoming>Flow_f8</bpmn:incoming>
+      <bpmn:outgoing>Flow_f10</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Node_g_join" name="">
+      <bpmn:incoming>Flow_f9</bpmn:incoming>
+      <bpmn:incoming>Flow_f10</bpmn:incoming>
+      <bpmn:outgoing>Flow_f11</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Node_t_pay" name="Release payment">
+      <bpmn:incoming>Flow_f11</bpmn:incoming>
+      <bpmn:outgoing>Flow_f12</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="Node_end_paid" name="Invoice paid">
+      <bpmn:incoming>Flow_f12</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_f1" sourceRef="Node_start" targetRef="Node_t_enter" />
+    <bpmn:sequenceFlow id="Flow_f3" sourceRef="Node_t_match" targetRef="Node_g_match" />
+    <bpmn:sequenceFlow id="Flow_f4" name="No match" sourceRef="Node_g_match" targetRef="Node_t_return">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">No match</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_f5" sourceRef="Node_t_return" targetRef="Node_end_returned" />
+    <bpmn:sequenceFlow id="Flow_f6" name="Matches" sourceRef="Node_g_match" targetRef="Node_g_amount">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Matches</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_f7" name="Over $5,000" sourceRef="Node_g_amount" targetRef="Node_t_fin_approve">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">Over $5,000</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_f8" name="Up to $5,000" sourceRef="Node_g_amount" targetRef="Node_t_ap_approve" />
+    <bpmn:sequenceFlow id="Flow_f9" sourceRef="Node_t_fin_approve" targetRef="Node_g_join" />
+    <bpmn:sequenceFlow id="Flow_f10" sourceRef="Node_t_ap_approve" targetRef="Node_g_join" />
+    <bpmn:sequenceFlow id="Flow_f11" sourceRef="Node_g_join" targetRef="Node_t_pay" />
+    <bpmn:sequenceFlow id="Flow_f12" sourceRef="Node_t_pay" targetRef="Node_end_paid" />
+    <bpmn:task id="Activity_0gufld4" name="Scan invoice">
+      <bpmn:incoming>Flow_0jt0e2g</bpmn:incoming>
+      <bpmn:outgoing>Flow_0hc6jvc</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_0jt0e2g" sourceRef="Node_t_enter" targetRef="Activity_0gufld4" />
+    <bpmn:sequenceFlow id="Flow_0hc6jvc" sourceRef="Activity_0gufld4" targetRef="Node_t_match" />
+    <bpmn:startEvent id="Node_start" name="Invoice received">
+      <bpmn:outgoing>Flow_f1</bpmn:outgoing>
+    </bpmn:startEvent>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Participant_1_di" bpmnElement="Participant_1" isHorizontal="true">
+        <dc:Bounds x="160" y="80" width="1550" height="360" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_lane_fin_di" bpmnElement="Lane_lane_fin" isHorizontal="true">
+        <dc:Bounds x="190" y="320" width="1520" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_lane_ap_di" bpmnElement="Lane_lane_ap" isHorizontal="true">
+        <dc:Bounds x="190" y="80" width="1520" height="240" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_t_enter_di" bpmnElement="Node_t_enter">
+        <dc:Bounds x="420" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_t_match_di" bpmnElement="Node_t_match">
+        <dc:Bounds x="580" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_g_match_di" bpmnElement="Node_g_match" isMarkerVisible="true">
+        <dc:Bounds x="765" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_t_return_di" bpmnElement="Node_t_return">
+        <dc:Bounds x="900" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_end_returned_di" bpmnElement="Node_end_returned">
+        <dc:Bounds x="1092" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_g_amount_di" bpmnElement="Node_g_amount" isMarkerVisible="true">
+        <dc:Bounds x="925" y="235" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_t_fin_approve_di" bpmnElement="Node_t_fin_approve">
+        <dc:Bounds x="1060" y="340" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_t_ap_approve_di" bpmnElement="Node_t_ap_approve">
+        <dc:Bounds x="1060" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_g_join_di" bpmnElement="Node_g_join" isMarkerVisible="true">
+        <dc:Bounds x="1245" y="355" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_t_pay_di" bpmnElement="Node_t_pay">
+        <dc:Bounds x="1380" y="340" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_end_paid_di" bpmnElement="Node_end_paid">
+        <dc:Bounds x="1572" y="362" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0gufld4_di" bpmnElement="Activity_0gufld4">
+        <dc:Bounds x="420" y="220" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Node_start_di" bpmnElement="Node_start">
+        <dc:Bounds x="292" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="270" y="188" width="80" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_f1_di" bpmnElement="Flow_f1">
+        <di:waypoint x="328" y="170" />
+        <di:waypoint x="374" y="170" />
+        <di:waypoint x="374" y="140" />
+        <di:waypoint x="420" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f3_di" bpmnElement="Flow_f3">
+        <di:waypoint x="680" y="140" />
+        <di:waypoint x="765" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f4_di" bpmnElement="Flow_f4">
+        <di:waypoint x="815" y="140" />
+        <di:waypoint x="900" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f5_di" bpmnElement="Flow_f5">
+        <di:waypoint x="1000" y="140" />
+        <di:waypoint x="1092" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f6_di" bpmnElement="Flow_f6">
+        <di:waypoint x="815" y="140" />
+        <di:waypoint x="870" y="140" />
+        <di:waypoint x="870" y="260" />
+        <di:waypoint x="925" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f7_di" bpmnElement="Flow_f7">
+        <di:waypoint x="975" y="260" />
+        <di:waypoint x="1018" y="260" />
+        <di:waypoint x="1018" y="380" />
+        <di:waypoint x="1060" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f8_di" bpmnElement="Flow_f8">
+        <di:waypoint x="975" y="260" />
+        <di:waypoint x="1060" y="260" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="987" y="235" width="63" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f9_di" bpmnElement="Flow_f9">
+        <di:waypoint x="1160" y="380" />
+        <di:waypoint x="1245" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f10_di" bpmnElement="Flow_f10">
+        <di:waypoint x="1160" y="260" />
+        <di:waypoint x="1202" y="260" />
+        <di:waypoint x="1202" y="380" />
+        <di:waypoint x="1245" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f11_di" bpmnElement="Flow_f11">
+        <di:waypoint x="1295" y="380" />
+        <di:waypoint x="1380" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_f12_di" bpmnElement="Flow_f12">
+        <di:waypoint x="1480" y="380" />
+        <di:waypoint x="1572" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0jt0e2g_di" bpmnElement="Flow_0jt0e2g">
+        <di:waypoint x="470" y="180" />
+        <di:waypoint x="470" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0hc6jvc_di" bpmnElement="Flow_0hc6jvc">
+        <di:waypoint x="520" y="260" />
+        <di:waypoint x="550" y="260" />
+        <di:waypoint x="550" y="140" />
+        <di:waypoint x="580" y="140" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -57,7 +57,7 @@ def test_run_eval_writes_reports(tmp_path: Path) -> None:
     results = run_eval(oracle, GOLD)
     assert results["failed"] == 0 and len(results["cases"]) >= 2
     md = write_report(results, tmp_path, "oracle")
-    assert "| **mean** |" in md.read_text()
+    assert "| **mean / total** |" in md.read_text()
     assert json.loads(md.with_suffix(".json").read_text())["aggregate"]["task_recall"] == 1.0
 
 

@@ -1,0 +1,24 @@
+{
+  "name": "Supplier invoice approval (broken extraction)",
+  "lanes": [{"id": "lane_ap", "name": "Accounts Payable"}, {"id": "lane_fin", "name": "Finance"}],
+  "nodes": [
+    {"id": "start", "type": "start_event", "name": "Invoice received", "lane_id": "lane_ap", "source_segment_ids": ["s1"], "confidence": 0.9},
+    {"id": "t_enter", "type": "user_task", "name": "Enter invoice into ERP", "lane_id": "lane_ap", "source_segment_ids": ["s1"], "confidence": 0.9},
+    {"id": "g_amount", "type": "exclusive_gateway", "name": "Amount over $5,000?", "lane_id": "lane_ap", "source_segment_ids": ["s2"], "confidence": 0.8},
+    {"id": "t_fin", "type": "user_task", "name": "Approve invoice", "lane_id": "lane_finance", "source_segment_ids": ["s2"], "confidence": 0.8},
+    {"id": "t_ap", "type": "user_task", "name": "Approve invoice", "lane_id": "lane_ap", "source_segment_ids": ["s3"], "confidence": 0.8},
+    {"id": "t_ap", "type": "user_task", "name": "Approve invoice (duplicate)", "lane_id": "lane_ap", "source_segment_ids": ["s3"], "confidence": 0.5},
+    {"id": "t_pay", "type": "service_task", "name": "Pay supplier", "lane_id": "lane_fin", "source_segment_ids": ["s4"], "confidence": 0.9},
+    {"id": "t_file", "type": "user_task", "name": "File the paperwork", "lane_id": "lane_ap", "source_segment_ids": ["s4"], "confidence": 0.3}
+  ],
+  "flows": [
+    {"id": "f1", "source_id": "start", "target_id": "t_enter", "condition": null},
+    {"id": "f2", "source_id": "t_enter", "target_id": "g_amount", "condition": null},
+    {"id": "f3", "source_id": "g_amount", "target_id": "t_fin", "condition": null},
+    {"id": "f4", "source_id": "g_amount", "target_id": "t_ap", "condition": "$5,000 or less"},
+    {"id": "f5", "source_id": "t_fin", "target_id": "t_pay", "condition": null},
+    {"id": "f6", "source_id": "t_ap", "target_id": "t_pay", "condition": null},
+    {"id": "f7", "source_id": "t_pay", "target_id": "t_archive", "condition": null}
+  ],
+  "open_questions": []
+}

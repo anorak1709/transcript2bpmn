@@ -1,8 +1,7 @@
 import shutil
 import tempfile
-from collections.abc import Iterator
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -10,8 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import storage
-from app.db.base import SessionLocal
-from app.db.models import Job, ProcessMap, Transcript
+from app.db.base import get_db
+from app.db.models import Job, Transcript
 from app.pipeline import ingest
 from app.pipeline.transcribe import AUDIO_EXTENSIONS, audio
 
@@ -19,11 +18,6 @@ router = APIRouter()
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_AUDIO_BYTES = 1024 * 1024 * 1024  # ~1 GB: hours of WAV
-
-
-def get_db() -> Iterator[Session]:
-    with SessionLocal() as db:
-        yield db
 
 
 DB = Annotated[Session, Depends(get_db)]
@@ -42,13 +36,6 @@ class JobOut(BaseModel):
     status: str
     error: str | None
     map_id: str | None
-
-
-class MapOut(BaseModel):
-    id: str
-    transcript_id: str
-    model: dict[str, Any]
-    bpmn_xml: str
 
 
 @router.post("/transcripts", status_code=201)
@@ -113,14 +100,6 @@ def get_job(job_id: str, db: DB) -> JobOut:
     if job is None:
         raise HTTPException(404, "Job not found")
     return _job_out(job)
-
-
-@router.get("/maps/{map_id}")
-def get_map(map_id: str, db: DB) -> MapOut:
-    m = db.get(ProcessMap, map_id)
-    if m is None:
-        raise HTTPException(404, "Map not found")
-    return MapOut(id=m.id, transcript_id=m.transcript_id, model=m.model, bpmn_xml=m.bpmn_xml)
 
 
 def _job_out(job: Job) -> JobOut:
