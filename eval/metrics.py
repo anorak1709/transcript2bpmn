@@ -60,8 +60,7 @@ def score(pred: ProcessModel, gold: ProcessModel, threshold: float = 0.8) -> dic
     pred_lane = {lane.id: lane.name for lane in pred.lanes}
     gold_lane = {lane.id: lane.name for lane in gold.lanes}
     lane_hits = sum(
-        similarity(pred_lane.get(p.lane_id, ""), gold_lane.get(g.lane_id, "")) >= threshold
-        for p, g in matched_tasks
+        similarity(pred_lane.get(p.lane_id, ""), gold_lane.get(g.lane_id, "")) >= threshold for p, g in matched_tasks
     )
 
     gold_gateways = [n for n in gold.nodes if n.type in GATEWAY_TYPES]
@@ -69,8 +68,7 @@ def score(pred: ProcessModel, gold: ProcessModel, threshold: float = 0.8) -> dic
 
     gold_edges = {(f.source_id, f.target_id) for f in gold.flows}
     pred_edges = {
-        (mapping.get(f.source_id, f"?{f.source_id}"), mapping.get(f.target_id, f"?{f.target_id}"))
-        for f in pred.flows
+        (mapping.get(f.source_id, f"?{f.source_id}"), mapping.get(f.target_id, f"?{f.target_id}")) for f in pred.flows
     }
     edge_hits = len(gold_edges & pred_edges)
     edge_p = _ratio(edge_hits, len(pred_edges))

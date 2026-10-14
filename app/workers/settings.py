@@ -1,15 +1,13 @@
-from typing import Any
-
 from arq.connections import RedisSettings
 
 from app.core.config import get_settings
+from app.core.logging import setup_logging
+from app.workers.jobs import process_transcript
 
-
-async def ping(ctx: dict[str, Any]) -> str:
-    # ponytail: arq refuses to start with zero functions; real jobs arrive in Phase 1.
-    return "pong"
+setup_logging()
 
 
 class WorkerSettings:
-    functions = [ping]
+    functions = [process_transcript]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
+    job_timeout = 1800  # long transcripts + LLM latency

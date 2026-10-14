@@ -1,31 +1,159 @@
 {
   "name": "New employee onboarding",
   "lanes": [
-    {"id": "lane_hr", "name": "HR"},
-    {"id": "lane_it", "name": "IT"},
-    {"id": "lane_mgr", "name": "Hiring Manager"}
+    {
+      "id": "lane_hr",
+      "name": "HR"
+    },
+    {
+      "id": "lane_it",
+      "name": "IT"
+    },
+    {
+      "id": "lane_mgr",
+      "name": "Hiring Manager"
+    }
   ],
   "nodes": [
-    {"id": "start", "type": "start_event", "name": "Signed offer received", "lane_id": "lane_hr", "source_segment_ids": ["3"], "confidence": 1.0},
-    {"id": "t_record", "type": "user_task", "name": "Create employee record in Workday", "lane_id": "lane_hr", "source_segment_ids": ["3"], "confidence": 1.0},
-    {"id": "g_split", "type": "parallel_gateway", "name": "", "lane_id": "lane_hr", "source_segment_ids": ["4"], "confidence": 1.0},
-    {"id": "t_laptop", "type": "user_task", "name": "Order laptop and set up accounts", "lane_id": "lane_it", "source_segment_ids": ["4"], "confidence": 1.0},
-    {"id": "t_benefits", "type": "user_task", "name": "Send benefits enrollment pack", "lane_id": "lane_hr", "source_segment_ids": ["5"], "confidence": 1.0},
-    {"id": "g_join", "type": "parallel_gateway", "name": "", "lane_id": "lane_mgr", "source_segment_ids": ["6"], "confidence": 1.0},
-    {"id": "t_orient", "type": "user_task", "name": "Run first-day orientation", "lane_id": "lane_mgr", "source_segment_ids": ["6"], "confidence": 1.0},
-    {"id": "end", "type": "end_event", "name": "Employee onboarded", "lane_id": "lane_mgr", "source_segment_ids": ["6"], "confidence": 1.0}
+    {
+      "id": "start",
+      "type": "start_event",
+      "name": "Signed offer received",
+      "lane_id": "lane_hr",
+      "source_segment_ids": [
+        "s3"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "id": "t_record",
+      "type": "user_task",
+      "name": "Create employee record in Workday",
+      "lane_id": "lane_hr",
+      "source_segment_ids": [
+        "s3"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "id": "g_split",
+      "type": "parallel_gateway",
+      "name": "",
+      "lane_id": "lane_hr",
+      "source_segment_ids": [
+        "s4"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "id": "t_laptop",
+      "type": "user_task",
+      "name": "Order laptop and set up accounts",
+      "lane_id": "lane_it",
+      "source_segment_ids": [
+        "s4"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "id": "t_benefits",
+      "type": "user_task",
+      "name": "Send benefits enrollment pack",
+      "lane_id": "lane_hr",
+      "source_segment_ids": [
+        "s5"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "id": "g_join",
+      "type": "parallel_gateway",
+      "name": "",
+      "lane_id": "lane_mgr",
+      "source_segment_ids": [
+        "s6"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "id": "t_orient",
+      "type": "user_task",
+      "name": "Run first-day orientation",
+      "lane_id": "lane_mgr",
+      "source_segment_ids": [
+        "s6"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "id": "end",
+      "type": "end_event",
+      "name": "Employee onboarded",
+      "lane_id": "lane_mgr",
+      "source_segment_ids": [
+        "s6"
+      ],
+      "confidence": 1.0
+    }
   ],
   "flows": [
-    {"id": "f1", "source_id": "start", "target_id": "t_record", "condition": null},
-    {"id": "f2", "source_id": "t_record", "target_id": "g_split", "condition": null},
-    {"id": "f3", "source_id": "g_split", "target_id": "t_laptop", "condition": null},
-    {"id": "f4", "source_id": "g_split", "target_id": "t_benefits", "condition": null},
-    {"id": "f5", "source_id": "t_laptop", "target_id": "g_join", "condition": null},
-    {"id": "f6", "source_id": "t_benefits", "target_id": "g_join", "condition": null},
-    {"id": "f7", "source_id": "g_join", "target_id": "t_orient", "condition": null},
-    {"id": "f8", "source_id": "t_orient", "target_id": "end", "condition": null}
+    {
+      "id": "f1",
+      "source_id": "start",
+      "target_id": "t_record",
+      "condition": null
+    },
+    {
+      "id": "f2",
+      "source_id": "t_record",
+      "target_id": "g_split",
+      "condition": null
+    },
+    {
+      "id": "f3",
+      "source_id": "g_split",
+      "target_id": "t_laptop",
+      "condition": null
+    },
+    {
+      "id": "f4",
+      "source_id": "g_split",
+      "target_id": "t_benefits",
+      "condition": null
+    },
+    {
+      "id": "f5",
+      "source_id": "t_laptop",
+      "target_id": "g_join",
+      "condition": null
+    },
+    {
+      "id": "f6",
+      "source_id": "t_benefits",
+      "target_id": "g_join",
+      "condition": null
+    },
+    {
+      "id": "f7",
+      "source_id": "g_join",
+      "target_id": "t_orient",
+      "condition": null
+    },
+    {
+      "id": "f8",
+      "source_id": "t_orient",
+      "target_id": "end",
+      "condition": null
+    }
   ],
   "open_questions": [
-    {"id": "q1", "question": "Who books the new employee's desk (Facilities?) and when?", "related_node_ids": [], "source_segment_ids": ["7"]}
+    {
+      "id": "q1",
+      "question": "Who books the new employee's desk (Facilities?) and when?",
+      "related_node_ids": [],
+      "source_segment_ids": [
+        "s7"
+      ]
+    }
   ]
 }

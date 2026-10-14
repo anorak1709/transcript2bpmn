@@ -5,8 +5,74 @@ Converts English meeting transcripts into BPMN 2.0 process maps (Camunda/Signavi
 **Core rule:** the LLM never writes BPMN XML. It extracts a typed `ProcessModel`
 (`app/models/process.py`); deterministic code validates it and converts it to BPMN.
 
-Status: **Phase 0** — skeleton, LLM provider, eval harness. Pipeline stages in
-`app/pipeline/` are empty.
+Status: **Phase 1**: text transcripts (.vtt/.srt/.txt/.docx) → BPMN XML, rendered in a
+read-only viewer. Not yet built: audio (Phase 2), validation/repair and editing (Phase 3),
+multi-meeting merge (Phase 4).
+
+## Pipeline
+
+```
+upload ─► ingest ─► normalize ─► extract (filter pass, extract pass) ─► convert ─► XSD check
+          parse     fillers,     LLM "filter" role  LLM "extract" role   lxml +
+          file      merge,       drops chatter      → ProcessModel       layout
+                    ids s1..sN
+```
+
+- **Ingest** (`app/pipeline/ingest.py`): webvtt-py for VTT/SRT (`<v Name>` voice tags or
+  `Name:` prefixes), python-docx for DOCX, `Speaker: text` detection for TXT/DOCX lines.
+  Unparseable uploads are rejected with 400 at upload time.
+- **Normalize** (`normalize.py`): deterministic filler stripping (um/uh/erm/hmm, "you know"
+  only when set off by commas), merge consecutive same-speaker fragments, assign `s1..sN`.
+  Those ids are stored on the transcript and every node cites them. No LLM cleanup pass yet;
+  add one if eval shows the rules aren't enough.
+- **Extract** (`extract.py`): prompts are versioned files in `app/pipeline/prompts/`
+  (`filter_v1.md`, `extract_v1.md`). To change a prompt, add `_v2` and bump the constant, so
+  eval reports stay comparable. Invented citation ids are dropped; a node left uncited
+  borrows its neighbours' citations with confidence halved, so every node cites ≥1 real segment.
+- **Convert** (`convert.py`): see *Layout* below. Output is validated against the official
+  OMG BPMN 2.0 XSD (`app/pipeline/xsd/`) before it is stored.
+
+## API
+
+| Endpoint | |
+|---|---|
+| `POST /transcripts` (multipart `file`) | upload; stores raw file in S3/MinIO + row in Postgres |
+| `POST /transcripts/{id}/process` | enqueue the pipeline (arq); returns the job |
+| `GET /jobs/{id}` | `queued → normalizing → extracting → converting → done \| failed` (+ `error`, `map_id`) |
+| `GET /maps/{id}` | `{model, bpmn_xml}`. The model is canonical; the XML is derived from it |
+| `GET /viewer/{map_id}` | read-only bpmn-js viewer + `.bpmn` download |
+
+```bash
+curl -F file=@eval/gold/01_invoice_approval/transcript.vtt localhost:8000/transcripts
+curl -X POST localhost:8000/transcripts/<id>/process
+curl localhost:8000/jobs/<job_id>          # until status=done
+open http://localhost:8000/viewer/<map_id>
+```
+
+## Layout
+
+**bpmn-auto-layout was evaluated and not used.** Its own README says it only lays out the
+first participant of a collaboration, and its source only gives lanes a default size. It
+never places nodes inside their lane, so every lane assignment would be lost visually.
+
+Instead, `convert.layout()` is a small lane-aware layout in Python:
+- x: longest-path layering over the flow graph (DFS marks loop-back flows and ignores them
+  for layering; they're drawn underneath)
+- y: lane band, in the model's lane order; nodes of one lane that share a column get sub-rows
+- orthogonal edge routing, fixed spacing
+
+Nodes referencing an unknown lane go to an "Unassigned" lane, and dangling flows are dropped.
+Real validation is Phase 3.
+
+## Manual Camunda Modeler check
+
+The XSD check is automated (`tests/test_convert.py`, `tests/test_integration.py`). Camunda
+Modeler is a manual check per release:
+
+1. Process a transcript, open `/viewer/<map_id>`, click **Download .bpmn**.
+2. Open it in [Camunda Modeler](https://camunda.com/download/modeler/) (File → Open).
+3. Pass if it opens with no import warnings, lanes contain their tasks, and gateway
+   condition labels show.
 
 ## Setup
 
@@ -19,25 +85,32 @@ make up                     # Postgres (host :5433), Redis, MinIO, API, worker
 curl localhost:8000/health  # {"status":"ok"}
 ```
 
-Or run the API locally against the compose services: `make run`.
+Or run the API + worker locally against the compose services:
+`docker compose up -d postgres redis minio && make migrate && make run` (and `make worker`
+in another shell).
+
+Tests: `tests/test_integration.py` needs the compose services up and migrated; it skips
+otherwise. Every other test is self-contained.
 
 | Command        | What it does                                   |
 |----------------|------------------------------------------------|
 | `make test`    | pytest                                         |
 | `make lint`    | ruff check + format check + mypy (strict)      |
 | `make fmt`     | auto-fix lint and format                       |
-| `make eval`    | run the eval harness (stub pipeline by default)|
+| `make eval`    | run the eval harness (real pipeline by default)|
 | `make migrate` | `alembic upgrade head`                         |
 | `make worker`  | run the arq worker locally                     |
 
-## Layout
+## Repo layout
 
 ```
 app/api/        FastAPI routers
 app/core/       settings (pydantic-settings), logging
 app/llm/        LLMProvider interface + LiteLLM implementation
 app/models/     ProcessModel schema
-app/pipeline/   ingest, normalize, extract, validate, convert (Phase 1+)
+app/pipeline/   ingest, normalize, extract, convert, run (validate: Phase 3)
+app/static/     viewer.html
+app/storage.py  S3/MinIO put/get
 app/db/         SQLAlchemy base + Alembic migrations
 app/workers/    arq worker settings
 eval/           gold cases, metrics, runner
@@ -73,7 +146,8 @@ meta.yaml       # meeting_type: walkthrough | general; notes: ...
 ```
 
 ```bash
-make eval                                                    # stub pipeline
+make eval                                                    # real pipeline (needs .env LLM config)
+make eval ARGS="--pipeline eval.stub_pipeline:pipeline"      # oracle stub, no LLM
 make eval ARGS="--pipeline mymodule:fn --threshold 0.75"     # any Callable[[Path], ProcessModel]
 ```
 
@@ -85,7 +159,9 @@ event type) by fuzzy name similarity (`difflib`, threshold `--threshold`, defaul
 events match on type alone. Lane accuracy and edge F1 are computed through that matching,
 so different ids in the prediction don't matter.
 
-The default `eval.stub_pipeline` is an oracle (returns `expected.json`) — it proves the
+The default is the real pipeline (`app.pipeline.run:eval_pipeline`). If a case fails (e.g.
+no API key), its traceback goes in the report and the run continues.
+`eval.stub_pipeline` is an oracle (returns `expected.json`) — it proves the
 plumbing, not quality. The 2 included cases are synthetic; add ≥10 real/permission-cleared
 cases before Phase 1 is done.
 

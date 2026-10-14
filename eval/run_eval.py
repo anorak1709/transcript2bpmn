@@ -6,7 +6,8 @@ Gold case layout (one folder per case):
     meta.yaml       # meeting_type: walkthrough | general, notes: ...
 
 Usage:
-    python -m eval.run_eval --pipeline eval.stub_pipeline:pipeline --gold eval/gold
+    python -m eval.run_eval --gold eval/gold                                   # real pipeline
+    python -m eval.run_eval --pipeline eval.stub_pipeline:pipeline            # oracle stub
 """
 
 import argparse
@@ -91,7 +92,7 @@ def load_pipeline(spec: str) -> Pipeline:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pipeline", default="eval.stub_pipeline:pipeline", help="module:function")
+    ap.add_argument("--pipeline", default="app.pipeline.run:eval_pipeline", help="module:function")
     ap.add_argument("--gold", type=Path, default=Path("eval/gold"))
     ap.add_argument("--threshold", type=float, default=0.8)
     ap.add_argument("--out", type=Path, default=Path("eval/reports"))
