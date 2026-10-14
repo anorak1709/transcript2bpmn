@@ -209,8 +209,11 @@ def to_bpmn(model: ProcessModel) -> bytes:
                 etree.SubElement(el, _q(BPMN, "outgoing")).text = xml_id("Flow", f.id)
 
     for f in flows:
-        attrs = {"id": xml_id("Flow", f.id), "sourceRef": xml_id("Node", f.source_id),
-                 "targetRef": xml_id("Node", f.target_id)}  # fmt: skip
+        attrs = {
+            "id": xml_id("Flow", f.id),
+            "sourceRef": xml_id("Node", f.source_id),
+            "targetRef": xml_id("Node", f.target_id),
+        }
         if f.condition:
             attrs["name"] = f.condition
         el = etree.SubElement(proc, _q(BPMN, "sequenceFlow"), attrs)

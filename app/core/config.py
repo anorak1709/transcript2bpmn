@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     model_repair: str = ""
     model_edit: str = ""
 
+    # Audio transcription (fallback input path). Model name always from env.
+    transcribe_provider: str = "openai"
+    transcribe_model: str = ""
+    transcribe_api_key: str | None = None  # falls back to LLM_API_KEY
+    transcribe_api_base: str | None = None
+    transcribe_chunk_seconds: int = 600  # keeps each request well under the 25 MB API limit
+
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str = "https://cloud.langfuse.com"

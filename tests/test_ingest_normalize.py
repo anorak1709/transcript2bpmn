@@ -97,8 +97,9 @@ def test_clean_text(raw: str, clean: str) -> None:
 
 
 def test_normalize_merges_same_speaker_and_assigns_ids() -> None:
-    segs = normalize(parse("call.vtt", VTT) + [Segment(segment_id="x", speaker="Marco", start_ts=None,
-                                                       end_ts=None, text="Uh.")])  # fmt: skip
+    segs = normalize(
+        parse("call.vtt", VTT) + [Segment(segment_id="x", speaker="Marco", start_ts=None, end_ts=None, text="Uh.")]
+    )
     assert [(s.segment_id, s.speaker, s.start_ts, s.end_ts) for s in segs] == [
         ("s1", "Priya", 1.0, 6.0),
         ("s2", "Marco", 66.25, 69.0),  # filler-only fragment dropped, end_ts kept
@@ -109,4 +110,14 @@ def test_normalize_merges_same_speaker_and_assigns_ids() -> None:
 
 def test_unknown_speakers_are_never_merged() -> None:
     raw = [Segment(segment_id=str(i), speaker=None, start_ts=None, end_ts=None, text=t) for i, t in enumerate("ab")]
+    assert [s.text for s in normalize(raw)] == ["A", "B"]
+
+
+def test_unknown_speaker_label_is_never_merged() -> None:
+    from app.models.transcript import UNKNOWN_SPEAKER
+
+    raw = [
+        Segment(segment_id=str(i), speaker=UNKNOWN_SPEAKER, start_ts=i, end_ts=i + 1, text=t)
+        for i, t in enumerate("ab")
+    ]
     assert [s.text for s in normalize(raw)] == ["A", "B"]

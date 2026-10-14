@@ -1,0 +1,12 @@
+Priya: So let me walk you through how invoices get approved today.
+Priya: A supplier invoice lands in the AP inbox, and someone on my team, um, enters it into the ERP.
+Priya: Then we match it against the purchase order. If it doesn't match, we send it back to the supplier.
+Marco: And if it matches, anything over five thousand dollars comes to me in finance for approval.
+Priya: Right, and under five thousand AP just approves it directly.
+Marco: Once it's approved either way, the payment run picks it up on Friday and pays the supplier.
+Priya: So let me walk you through how invoices get approved today.
+Priya: A supplier invoice lands in the AP inbox, and someone on my team, um, enters it into the ERP.
+Priya: Then we match it against the purchase order. If it doesn't match, we send it back to the supplier.
+Marco: And if it matches, anything over five thousand dollars comes to me in finance for approval.
+Priya: Right, and under five thousand AP just approves it directly.
+Marco: Once it's approved either way, the payment run picks it up on Friday and pays the supplier.

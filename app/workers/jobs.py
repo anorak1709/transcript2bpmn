@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from app import storage
@@ -8,11 +10,12 @@ from app.db.models import Job, ProcessMap, Transcript
 from app.llm.provider import LiteLLMProvider, LLMProvider
 from app.pipeline import extract, ingest, normalize
 from app.pipeline.run import model_to_bpmn
+from app.pipeline.transcribe import AUDIO_EXTENSIONS, Transcriber, get_transcriber
 
 log = logging.getLogger(__name__)
 
 
-def run_job(job_id: str, llm: LLMProvider | None = None) -> None:
+def run_job(job_id: str, llm: LLMProvider | None = None, transcriber: Transcriber | None = None) -> None:
     """Run the full pipeline for one job, recording each stage on the Job row."""
     with SessionLocal() as db:
         job = db.get_one(Job, job_id)
@@ -23,8 +26,19 @@ def run_job(job_id: str, llm: LLMProvider | None = None) -> None:
             db.commit()
 
         try:
-            stage("normalizing")
-            raw = ingest.parse(transcript.filename, storage.get(transcript.storage_key))
+            suffix = Path(transcript.filename).suffix.lower()
+            if suffix in AUDIO_EXTENSIONS:
+                stage("transcribing")
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / f"audio{suffix}"
+                    storage.download(transcript.storage_key, path)
+                    result = (transcriber or get_transcriber()).transcribe(path)
+                raw = result.segments
+                transcript.diarization_available = result.diarization_available
+                stage("normalizing")
+            else:
+                stage("normalizing")
+                raw = ingest.parse(transcript.filename, storage.get(transcript.storage_key))
             segments = normalize.normalize(raw)
             transcript.segments = [s.model_dump() for s in segments]
 

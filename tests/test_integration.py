@@ -4,6 +4,9 @@ Skipped when the services aren't up: run `make up` (or `docker compose up -d pos
 and `make migrate` first.
 """
 
+import shutil
+import subprocess
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -12,9 +15,11 @@ from sqlalchemy import text
 
 from app import storage
 from app.db.base import SessionLocal
-from app.db.models import Transcript
+from app.db.models import Job, Transcript
 from app.main import app
+from app.models.transcript import UNKNOWN_SPEAKER, Segment
 from app.pipeline.run import model_to_bpmn
+from app.pipeline.transcribe import Transcriber, Transcription
 from app.workers.jobs import run_job
 from tests.conftest import GOLD, FakeLLM, gold_model
 
@@ -90,3 +95,52 @@ def test_failed_pipeline_marks_job_failed() -> None:
         run_job(job_id, Boom(gold_model("01_invoice_approval")))
         job = client.get(f"/jobs/{job_id}").json()
         assert job["status"] == "failed" and "LLM down" in job["error"]
+
+
+def _wav(tmp_path: Path, seconds: int = 3) -> bytes:
+    path = tmp_path / "a.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", f"sine=d={seconds}", str(path)], check=True)
+    return path.read_bytes()
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+def test_audio_upload_transcribes_then_runs_pipeline(tmp_path: Path) -> None:
+    class FakeTranscriber(Transcriber):
+        seen_status: str | None = None
+
+        def transcribe(self, audio_path: Path) -> Transcription:
+            assert audio_path.read_bytes()[:4] == b"RIFF"  # the stored original came back from S3
+            with SessionLocal() as db:
+                FakeTranscriber.seen_status = db.get_one(Job, job_id).status
+            texts = ["A supplier invoice lands in the AP inbox.", "We enter it into the ERP.", "Then we pay it."]
+            segs = [
+                Segment(segment_id="", speaker=UNKNOWN_SPEAKER, start_ts=i, end_ts=i + 1, text=t)
+                for i, t in enumerate(texts)
+            ]
+            return Transcription(segments=segs, diarization_available=False)
+
+    with TestClient(app) as client:
+        app.state.arq = RecordingQueue()
+        r = client.post("/transcripts", files={"file": ("meeting.wav", _wav(tmp_path), "audio/wav")})
+        assert r.status_code == 201, r.text
+        assert abs(r.json()["duration_seconds"] - 3) < 0.1 and r.json()["segment_count"] is None
+        tid = r.json()["id"]
+        job_id = client.post(f"/transcripts/{tid}/process").json()["id"]
+
+        run_job(job_id, FakeLLM(gold_model("01_invoice_approval")), FakeTranscriber())
+
+        assert FakeTranscriber.seen_status == "transcribing"
+        job = client.get(f"/jobs/{job_id}").json()
+        assert job["status"] == "done", job["error"]
+        with SessionLocal() as db:
+            t = db.get_one(Transcript, tid)
+            assert t.diarization_available is False
+            assert [s["segment_id"] for s in t.segments or []] == ["s1", "s2", "s3"]  # not merged
+
+
+def test_non_audio_with_audio_extension_is_rejected() -> None:
+    if shutil.which("ffprobe") is None:
+        pytest.skip("ffmpeg not installed")
+    with TestClient(app) as client:
+        r = client.post("/transcripts", files={"file": ("fake.mp3", b"definitely not audio", "audio/mpeg")})
+        assert r.status_code == 400 and "audio" in r.json()["detail"]

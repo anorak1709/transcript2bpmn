@@ -5,9 +5,9 @@ Converts English meeting transcripts into BPMN 2.0 process maps (Camunda/Signavi
 **Core rule:** the LLM never writes BPMN XML. It extracts a typed `ProcessModel`
 (`app/models/process.py`); deterministic code validates it and converts it to BPMN.
 
-Status: **Phase 1**: text transcripts (.vtt/.srt/.txt/.docx) → BPMN XML, rendered in a
-read-only viewer. Not yet built: audio (Phase 2), validation/repair and editing (Phase 3),
-multi-meeting merge (Phase 4).
+Status: **Phase 2**: text transcripts (.vtt/.srt/.txt/.docx) and audio recordings
+(.mp3/.m4a/.wav/.webm/.mp4) → BPMN XML, rendered in a read-only viewer. Not yet built:
+validation/repair and editing (Phase 3), multi-meeting merge (Phase 4).
 
 ## Pipeline
 
@@ -29,6 +29,7 @@ upload ─► ingest ─► normalize ─► extract (filter pass, extract pass)
   (`filter_v1.md`, `extract_v1.md`). To change a prompt, add `_v2` and bump the constant, so
   eval reports stay comparable. Invented citation ids are dropped; a node left uncited
   borrows its neighbours' citations with confidence halved, so every node cites ≥1 real segment.
+- **Transcribe** (`app/pipeline/transcribe/`, audio only): see *Audio* below.
 - **Convert** (`convert.py`): see *Layout* below. Output is validated against the official
   OMG BPMN 2.0 XSD (`app/pipeline/xsd/`) before it is stored.
 
@@ -38,7 +39,7 @@ upload ─► ingest ─► normalize ─► extract (filter pass, extract pass)
 |---|---|
 | `POST /transcripts` (multipart `file`) | upload; stores raw file in S3/MinIO + row in Postgres |
 | `POST /transcripts/{id}/process` | enqueue the pipeline (arq); returns the job |
-| `GET /jobs/{id}` | `queued → normalizing → extracting → converting → done \| failed` (+ `error`, `map_id`) |
+| `GET /jobs/{id}` | `queued → (transcribing) → normalizing → extracting → converting → done \| failed` (+ `error`, `map_id`) |
 | `GET /maps/{id}` | `{model, bpmn_xml}`. The model is canonical; the XML is derived from it |
 | `GET /viewer/{map_id}` | read-only bpmn-js viewer + `.bpmn` download |
 
@@ -48,6 +49,45 @@ curl -X POST localhost:8000/transcripts/<id>/process
 curl localhost:8000/jobs/<job_id>          # until status=done
 open http://localhost:8000/viewer/<map_id>
 ```
+
+## Audio
+
+Platform transcript exports (Teams/Zoom/Meet VTT) stay the primary input. Audio is the
+fallback when no export exists. Requires ffmpeg (`brew install ffmpeg`; it's in the Docker image).
+
+- Upload audio to the same `POST /transcripts`. It's checked with ffprobe and streamed to
+  object storage (up to 1 GB). The job gets an extra `transcribing` stage.
+- `Transcriber` interface (`transcribe/base.py`): `transcribe(audio_path) -> Transcription`
+  (segments in the normalizer's schema + `diarization_available`). Pick the adapter with
+  `TRANSCRIBE_PROVIDER`.
+- **OpenAI adapter** (`transcribe/openai.py`), model from `TRANSCRIBE_MODEL`:
+  - Audio is re-encoded to 16 kHz mono MP3 and split into `TRANSCRIBE_CHUNK_SECONDS` chunks
+    (default 600 s ≈ 3.6 MB, far under the 25 MB API limit). Chunk offsets are measured, and
+    `stitch()` shifts timestamps onto the recording timeline, keeping them monotonic and in bounds.
+  - Diarization: models whose name contains `diarize` are called with `diarized_json`.
+    Speaker labels restart at "A" on every request, so after chunk 1 the adapter sends 2–10 s
+    voice clips of up to 4 speakers as `known_speaker_references`. Later chunks then reuse
+    the same labels. A voice not among the references stays distinct (`Speaker C (part 3)`)
+    rather than being guessed.
+  - Other models: `whisper*` → timed segments; anything else → text split into sentences
+    with approximate timestamps. All speakers are `Unknown speaker`, and
+    `transcripts.diarization_available = false` so the UI can ask the user to label speakers.
+    Unknown-speaker segments are never merged.
+- **Second provider:** `transcribe/deepgram.py` is a documented stub with the steps to add one.
+
+### ASR benchmark
+
+```bash
+# synthetic multi-voice recording + reference (macOS `say`)
+uv run python -m eval.asr.make_sample eval/gold/01_invoice_approval/transcript.vtt --minutes 32 --out eval/asr/local/long
+# WER + speaker-attribution accuracy per provider[:model]
+uv run python -m eval.asr_benchmark eval/asr/samples --configs openai:<model-a> openai:<model-b>
+```
+
+`eval/asr/samples/` has a 1-minute two-speaker sample. Put long or real recordings in
+`eval/asr/local/` (gitignored). Each audio file needs a `<stem>.ref.txt` with `Speaker: text` lines.
+Speaker accuracy maps each hypothesis label to the reference speaker it overlaps most,
+then counts correctly attributed aligned words.
 
 ## Layout
 
@@ -76,7 +116,7 @@ Modeler is a manual check per release:
 
 ## Setup
 
-Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), Docker.
+Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), Docker, ffmpeg (audio only).
 
 ```bash
 uv sync
@@ -108,12 +148,12 @@ app/api/        FastAPI routers
 app/core/       settings (pydantic-settings), logging
 app/llm/        LLMProvider interface + LiteLLM implementation
 app/models/     ProcessModel schema
-app/pipeline/   ingest, normalize, extract, convert, run (validate: Phase 3)
+app/pipeline/   ingest, transcribe/, normalize, extract, convert, run (validate: Phase 3)
 app/static/     viewer.html
 app/storage.py  S3/MinIO put/get
 app/db/         SQLAlchemy base + Alembic migrations
 app/workers/    arq worker settings
-eval/           gold cases, metrics, runner
+eval/           gold cases, metrics, runner; asr_benchmark.py + asr/ (audio samples)
 ```
 
 ## LLM provider

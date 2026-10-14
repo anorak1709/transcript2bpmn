@@ -2,7 +2,7 @@
 
 import re
 
-from app.models.transcript import Segment
+from app.models.transcript import UNKNOWN_SPEAKER, Segment
 
 # Pure fillers, removed anywhere. "you know" only when set off as a filler (", you know,"
 # or sentence-initial "You know,"), so "do you know the code" survives.
@@ -34,7 +34,9 @@ def normalize(raw: list[Segment]) -> list[Segment]:
         if not text:
             continue
         prev = merged[-1] if merged else None
-        if prev and seg.speaker is not None and seg.speaker == prev.speaker:
+        # Unknown speakers are never merged: one undiarized recording would collapse into a
+        # single giant segment and citations would become useless.
+        if prev and seg.speaker not in (None, UNKNOWN_SPEAKER) and seg.speaker == prev.speaker:
             prev.text = f"{prev.text} {text}"
             prev.end_ts = seg.end_ts if seg.end_ts is not None else prev.end_ts
         else:

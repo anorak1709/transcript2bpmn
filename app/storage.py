@@ -1,6 +1,7 @@
 """S3-compatible object storage (MinIO locally)."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import boto3
@@ -33,3 +34,12 @@ def put(key: str, data: bytes) -> None:
 
 def get(key: str) -> bytes:
     return _client().get_object(Bucket=get_settings().s3_bucket, Key=key)["Body"].read()
+
+
+def put_file(key: str, path: Path) -> None:
+    """Streams from disk; use for large uploads (audio)."""
+    _client().upload_file(str(path), get_settings().s3_bucket, key)
+
+
+def download(key: str, path: Path) -> None:
+    _client().download_file(get_settings().s3_bucket, key, str(path))
