@@ -72,3 +72,64 @@ def test_missing_model_role_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.delenv("MODEL_EDIT", raising=False)
     with pytest.raises(ValueError, match="MODEL_EDIT"):
         Settings(_env_file=None).model_for("edit")
+
+
+AZURE_ENV = {
+    "LLM_PROVIDER": "azure",
+    "LLM_API_BASE": "https://acme.openai.azure.com",
+    "LLM_API_VERSION": "2025-04-01-preview",
+    "LLM_API_KEY": "azure-key",
+    "MODEL_EXTRACT": "extract-deploy",
+    "MODEL_EMBED": "embed-deploy",
+    "TRANSCRIBE_PROVIDER": "azure",
+    "TRANSCRIBE_MODEL": "transcribe-deploy",
+}
+
+
+def test_azure_is_config_only_for_every_model_call(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    """Every outbound model call (structured LLM, embeddings, transcription) goes to Azure
+    deployments when only the env changes."""
+    for k, v in AZURE_ENV.items():
+        monkeypatch.setenv(k, v)
+    s = Settings(_env_file=None)
+
+    calls: dict[str, dict[str, Any]] = {}
+    monkeypatch.setattr(
+        litellm,
+        "responses",
+        lambda **kw: calls.setdefault("responses", kw) and ResponsesAPIResponse.model_validate(REPLY),
+    )
+    monkeypatch.setattr(
+        litellm,
+        "embedding",
+        lambda **kw: calls.setdefault("embedding", kw) and type("E", (), {"data": [{"embedding": [1.0]}]})(),
+    )
+    provider = LiteLLMProvider(s)
+    provider.structured("p", "i", Answer, "extract")
+    provider.embed(["x"])
+    for name in ("responses", "embedding"):
+        assert calls[name]["api_base"] == "https://acme.openai.azure.com"
+        assert calls[name]["api_version"] == "2025-04-01-preview"
+    assert calls["responses"]["model"] == "azure/extract-deploy"
+    assert calls["embedding"]["model"] == "azure/embed-deploy"
+
+    from app.pipeline.transcribe import get_transcriber
+    from app.pipeline.transcribe import openai as adapter
+
+    made: dict[str, Any] = {}
+    monkeypatch.setattr(adapter, "AzureOpenAI", lambda **kw: made.update(kw) or object())
+    t = get_transcriber(s)
+    assert made == {
+        "api_key": "azure-key",
+        "azure_endpoint": "https://acme.openai.azure.com",
+        "api_version": "2025-04-01-preview",
+    }
+    assert t.model == "transcribe-deploy"  # type: ignore[attr-defined]
+
+
+def test_incomplete_azure_config_fails_at_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "azure")
+    monkeypatch.setenv("LLM_API_BASE", "https://acme.openai.azure.com")
+    monkeypatch.delenv("LLM_API_VERSION", raising=False)
+    with pytest.raises(ValueError, match="LLM_PROVIDER=azure needs"):
+        Settings(_env_file=None)

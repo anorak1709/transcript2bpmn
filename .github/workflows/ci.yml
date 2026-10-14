@@ -1,0 +1,65 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * 1"  # weekly live check against the configured providers
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_USER: app, POSTGRES_PASSWORD: app, POSTGRES_DB: app}
+        ports: ["5433:5432"]
+        options: --health-cmd "pg_isready -U app" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # Service containers can't take a command; MinIO needs `server /data`.
+      - run: docker run -d -p 9000:9000 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin cgr.dev/chainguard/minio server /data
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: uv sync && uv run playwright install --with-deps chromium
+      - run: make lint
+      - run: uv run alembic upgrade head
+      - run: make test
+
+  # Live end-to-end runs against real providers. Runs only where the secrets exist (forks and
+  # PRs without them skip it). The azure job is the proof that switching to Azure OpenAI is
+  # config only: same code, different env.
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [openai, azure]
+    env:
+      LLM_PROVIDER: ${{ matrix.provider }}
+      LLM_API_KEY: ${{ matrix.provider == 'azure' && secrets.AZURE_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+      LLM_API_BASE: ${{ matrix.provider == 'azure' && secrets.AZURE_OPENAI_ENDPOINT || '' }}
+      LLM_API_VERSION: ${{ matrix.provider == 'azure' && vars.AZURE_OPENAI_API_VERSION || '' }}
+      MODEL_EXTRACT: ${{ matrix.provider == 'azure' && vars.AZURE_DEPLOY_EXTRACT || vars.OPENAI_MODEL_EXTRACT }}
+      MODEL_FILTER: ${{ matrix.provider == 'azure' && vars.AZURE_DEPLOY_FILTER || vars.OPENAI_MODEL_FILTER }}
+      MODEL_REPAIR: ${{ matrix.provider == 'azure' && vars.AZURE_DEPLOY_REPAIR || vars.OPENAI_MODEL_REPAIR }}
+      MODEL_EDIT: ${{ matrix.provider == 'azure' && vars.AZURE_DEPLOY_EDIT || vars.OPENAI_MODEL_EDIT }}
+      MODEL_MERGE: ${{ matrix.provider == 'azure' && vars.AZURE_DEPLOY_MERGE || vars.OPENAI_MODEL_MERGE }}
+      MODEL_EMBED: ${{ matrix.provider == 'azure' && vars.AZURE_DEPLOY_EMBED || vars.OPENAI_MODEL_EMBED }}
+      TRANSCRIBE_PROVIDER: ${{ matrix.provider }}
+      TRANSCRIBE_MODEL: ${{ matrix.provider == 'azure' && vars.AZURE_DEPLOY_TRANSCRIBE || vars.OPENAI_MODEL_TRANSCRIBE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: uv sync
+      - name: Skip when this provider has no credentials
+        id: creds
+        run: echo "ok=${{ env.LLM_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
+      - if: steps.creds.outputs.ok == 'true'
+        run: uv run python -m eval.smoke --audio eval/asr/samples/invoice_approval.m4a

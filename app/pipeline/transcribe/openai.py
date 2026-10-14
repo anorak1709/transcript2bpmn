@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
+from openai import AzureOpenAI, OpenAI
 
 from app.core.config import Settings, get_settings
 from app.models.transcript import UNKNOWN_SPEAKER, Segment
@@ -33,9 +33,17 @@ class OpenAITranscriber(Transcriber):
         self.model = s.transcribe_model
         self.chunk_seconds = s.transcribe_chunk_seconds
         self.diarize = "diarize" in self.model
-        self.client = client or OpenAI(
-            api_key=s.transcribe_api_key or s.llm_api_key, base_url=s.transcribe_api_base or None
-        )
+        key = s.transcribe_api_key or s.llm_api_key
+        if client is not None:
+            self.client = client
+        elif s.transcribe_provider == "azure":  # TRANSCRIBE_MODEL is the Azure deployment name
+            self.client = AzureOpenAI(
+                api_key=key,
+                azure_endpoint=s.transcribe_api_base or s.llm_api_base or "",
+                api_version=s.transcribe_api_version or s.llm_api_version,
+            )
+        else:
+            self.client = OpenAI(api_key=key, base_url=s.transcribe_api_base or None)
 
     def transcribe(self, audio_path: Path) -> Transcription:
         chunks: list[Chunk] = []

@@ -43,3 +43,29 @@ def put_file(key: str, path: Path) -> None:
 
 def download(key: str, path: Path) -> None:
     _client().download_file(get_settings().s3_bucket, key, str(path))
+
+
+def delete(key: str) -> None:
+    _client().delete_object(Bucket=get_settings().s3_bucket, Key=key)
+
+
+def delete_prefix(prefix: str) -> int:
+    """Delete every object under `prefix` (e.g. a whole project). Returns how many."""
+    bucket, n = get_settings().s3_bucket, 0
+    for page in _client().get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+        keys = [{"Key": o["Key"]} for o in page.get("Contents", [])]
+        if keys:
+            _client().delete_objects(Bucket=bucket, Delete={"Objects": keys})  # type: ignore[typeddict-item]
+            n += len(keys)
+    return n
+
+
+def list_keys(prefix: str) -> list[str]:
+    bucket = get_settings().s3_bucket
+    pages = _client().get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix)
+    return [o["Key"] for page in pages for o in page.get("Contents", [])]
+
+
+def project_prefix(org_id: str, project_id: str) -> str:
+    """All of a project's objects live under one prefix, so deleting a project is one sweep."""
+    return f"orgs/{org_id}/projects/{project_id}/"

@@ -16,30 +16,24 @@ from app.api.maps import get_llm
 from app.main import app
 from app.pipeline.convert import validate_xsd
 from app.pipeline.edit import EditPlan
-from app.workers.jobs import run_job
-from tests.conftest import GOLD, FakeLLM, gold_model
-from tests.test_integration import RecordingQueue, _services_up
+from tests.conftest import GOLD, FakeLLM, TenantCtx, gold_model, needs_services
 from tests.test_validate import ScriptedLLM
 
-pytestmark = pytest.mark.skipif(not _services_up(), reason="compose services not running / not migrated")
+pytestmark = needs_services
 EDITED = Path(__file__).parent / "fixtures" / "bpmnjs_edited_invoice.bpmn"
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
-    with TestClient(app) as c:
-        app.state.arq = RecordingQueue()
-        yield c
+def client(tenant: TenantCtx) -> Iterator[TestClient]:
+    yield tenant.client
     app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def map_id(client: TestClient) -> str:
+def map_id(tenant: TenantCtx) -> str:
     vtt = (GOLD / "01_invoice_approval" / "transcript.vtt").read_bytes()
-    tid = client.post("/transcripts", files={"file": ("w.vtt", vtt)}).json()["id"]
-    job_id = client.post(f"/transcripts/{tid}/process").json()["id"]
-    run_job(job_id, FakeLLM(gold_model("01_invoice_approval")))
-    mid: str = client.get(f"/jobs/{job_id}").json()["map_id"]
+    tid = tenant.upload("w.vtt", vtt).json()["id"]
+    mid: str = tenant.process(tid, FakeLLM(gold_model("01_invoice_approval")))["map_id"]
     return mid
 
 

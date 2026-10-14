@@ -10,7 +10,7 @@ __all__ = ["AUDIO_EXTENSIONS", "Transcriber", "Transcription", "get_transcriber"
 def get_transcriber(settings: Settings | None = None) -> Transcriber:
     """Pick the adapter named by TRANSCRIBE_PROVIDER."""
     s = settings or get_settings()
-    if s.transcribe_provider == "openai":
+    if s.transcribe_provider in ("openai", "azure"):  # same API; Azure just needs another client
         from app.pipeline.transcribe.openai import OpenAITranscriber
 
         return OpenAITranscriber(s)

@@ -1,0 +1,6 @@
+Marco: Let me describe the invoice process from the finance side.
+Sana: On our side, AP keys each invoice into the ERP and checks it against the purchase order.
+Marco: Right. If it doesn't match the PO it goes back to the supplier.
+Sana: If it matches and it's over ten thousand dollars, Marco approves it. Ten thousand or less, we approve it in AP.
+Marco: After approval, treasury validates the supplier's bank details.
+Sana: And then treasury pays the supplier in the Friday payment run.

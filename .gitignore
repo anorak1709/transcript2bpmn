@@ -7,3 +7,4 @@ __pycache__/
 .ruff_cache/
 eval/reports/
 eval/asr/local/
+tests/.export_check.png

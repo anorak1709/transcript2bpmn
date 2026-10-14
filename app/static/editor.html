@@ -92,8 +92,22 @@
       return ids.has(stripped) ? stripped : (ids.has(xmlId) ? xmlId : null);
     };
 
-    async function api(method, path, body, type = 'application/json') {
-      const res = await fetch(path, { method, headers: body ? { 'Content-Type': type } : {}, body });
+    const KEY = 't2b_api_key';
+    function apiKey(force) {
+      let key = null;
+      try { key = force ? null : localStorage.getItem(KEY); } catch {}
+      if (!key) {
+        key = (prompt('API key for this workspace (t2b_…):') || '').trim();
+        try { if (key) localStorage.setItem(KEY, key); } catch {}
+      }
+      return key;
+    }
+
+    async function api(method, path, body, type = 'application/json', retried = false) {
+      const headers = { Authorization: `Bearer ${apiKey(retried)}` };
+      if (body) headers['Content-Type'] = type;
+      const res = await fetch(path, { method, headers, body });
+      if (res.status === 401 && !retried) return api(method, path, body, type, true);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : `HTTP ${res.status}`);
       return data;
@@ -124,6 +138,19 @@
       for (const q of map.model.open_questions) {
         const li = el('li', 'item' + (q.related_node_ids.length ? ' clickable' : ''), q.question);
         if (q.related_node_ids.length) li.onclick = () => select(q.related_node_ids[0]);
+        if (q.id.startsWith('conflict_')) {
+          const b = el('button', null, 'Mark resolved');
+          b.style.marginTop = '6px'; b.style.display = 'block';
+          b.onclick = async (e) => {
+            e.stopPropagation();
+            try {
+              await api('POST', `/conflicts/${q.id.slice('conflict_'.length)}/resolve`);
+              render(await api('GET', `/maps/${mapId}`));
+              toast('Conflict resolved');
+            } catch (err) { toast(err.message); }
+          };
+          li.append(b);
+        }
         list.append(li);
       }
     }
@@ -165,7 +192,7 @@
       if (!node.source_segment_ids.length) box.append(el('div', 'muted', 'No transcript source.'));
       for (const id of node.source_segment_ids) {
         const s = segs.get(id);
-        if (!s) continue;
+        if (!s) { box.append(el('div', 'quote muted', `${id}: source text no longer available (retention policy)`)); continue; }
         const q = el('div', 'quote');
         const ts = s.start_ts != null ? ` · ${Math.floor(s.start_ts / 60)}:${String(Math.floor(s.start_ts % 60)).padStart(2, '0')}` : '';
         q.append(el('div', 'who', `${s.speaker || 'Unknown'}${ts} · ${id}`), el('div', null, s.text));

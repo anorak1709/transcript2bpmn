@@ -1,0 +1,39 @@
+{
+  "name": "Invoice approval (finance view)",
+  "lanes": [
+    {"id": "lane_ap", "name": "Accounts Payable"},
+    {"id": "lane_fin", "name": "Finance"},
+    {"id": "lane_treasury", "name": "Treasury"}
+  ],
+  "nodes": [
+    {"id": "start", "type": "start_event", "name": "Invoice received", "lane_id": "lane_ap", "source_segment_ids": ["s2"], "confidence": 1.0},
+    {"id": "t_key", "type": "user_task", "name": "Key invoice into ERP", "lane_id": "lane_ap", "source_segment_ids": ["s2"], "confidence": 1.0},
+    {"id": "t_check", "type": "user_task", "name": "Check invoice against purchase order", "lane_id": "lane_ap", "source_segment_ids": ["s2"], "confidence": 1.0},
+    {"id": "g_po", "type": "exclusive_gateway", "name": "Matches PO?", "lane_id": "lane_ap", "source_segment_ids": ["s3"], "confidence": 1.0},
+    {"id": "t_back", "type": "user_task", "name": "Send invoice back to supplier", "lane_id": "lane_ap", "source_segment_ids": ["s3"], "confidence": 1.0},
+    {"id": "end_back", "type": "end_event", "name": "Invoice returned", "lane_id": "lane_ap", "source_segment_ids": ["s3"], "confidence": 1.0},
+    {"id": "g_amt", "type": "exclusive_gateway", "name": "Amount over $10,000?", "lane_id": "lane_ap", "source_segment_ids": ["s4"], "confidence": 1.0},
+    {"id": "t_fin", "type": "user_task", "name": "Approve invoice", "lane_id": "lane_fin", "source_segment_ids": ["s4"], "confidence": 1.0},
+    {"id": "t_ap", "type": "user_task", "name": "Approve invoice", "lane_id": "lane_ap", "source_segment_ids": ["s4"], "confidence": 1.0},
+    {"id": "g_j", "type": "exclusive_gateway", "name": "", "lane_id": "lane_fin", "source_segment_ids": ["s5"], "confidence": 1.0},
+    {"id": "t_bank", "type": "user_task", "name": "Validate supplier bank details", "lane_id": "lane_treasury", "source_segment_ids": ["s5"], "confidence": 1.0},
+    {"id": "t_pay", "type": "service_task", "name": "Pay supplier in Friday payment run", "lane_id": "lane_treasury", "source_segment_ids": ["s6"], "confidence": 1.0},
+    {"id": "end", "type": "end_event", "name": "Invoice paid", "lane_id": "lane_treasury", "source_segment_ids": ["s6"], "confidence": 1.0}
+  ],
+  "flows": [
+    {"id": "f1", "source_id": "start", "target_id": "t_key", "condition": null},
+    {"id": "f2", "source_id": "t_key", "target_id": "t_check", "condition": null},
+    {"id": "f3", "source_id": "t_check", "target_id": "g_po", "condition": null},
+    {"id": "f4", "source_id": "g_po", "target_id": "t_back", "condition": "No match"},
+    {"id": "f5", "source_id": "t_back", "target_id": "end_back", "condition": null},
+    {"id": "f6", "source_id": "g_po", "target_id": "g_amt", "condition": "Matches"},
+    {"id": "f7", "source_id": "g_amt", "target_id": "t_fin", "condition": "Over $10,000"},
+    {"id": "f8", "source_id": "g_amt", "target_id": "t_ap", "condition": "$10,000 or less"},
+    {"id": "f9", "source_id": "t_fin", "target_id": "g_j", "condition": null},
+    {"id": "f10", "source_id": "t_ap", "target_id": "g_j", "condition": null},
+    {"id": "f11", "source_id": "g_j", "target_id": "t_bank", "condition": null},
+    {"id": "f12", "source_id": "t_bank", "target_id": "t_pay", "condition": null},
+    {"id": "f13", "source_id": "t_pay", "target_id": "end", "condition": null}
+  ],
+  "open_questions": []
+}

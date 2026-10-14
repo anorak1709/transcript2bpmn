@@ -1,0 +1,8 @@
+meeting_type: walkthrough
+notes: >
+  Synthetic. Meeting 1 = AP walkthrough; meeting 2 = finance view, reworded steps.
+  Same steps must merge (no duplicates). New Treasury bank-details check is inserted before
+  payment. Disagreements: approval threshold ($5k vs $10k) and who pays (Finance vs Treasury).
+expected_conflicts:
+  - {kind: condition, node: "Amount over $5,000?"}
+  - {kind: owner, node: "Pay supplier in weekly payment run"}

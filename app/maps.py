@@ -17,12 +17,17 @@ class NothingToUndo(Exception):
     pass
 
 
-def create_map(db: Session, transcript_id: str, model: ProcessModel) -> ProcessMap:
+def create_map(
+    db: Session, project_id: str, transcript_id: str | None, model: ProcessModel, source: str = "extract"
+) -> ProcessMap:
+    """transcript_id=None makes a project's merged map."""
     xml = model_to_bpmn(model)
-    pmap = ProcessMap(transcript_id=transcript_id, model=model.model_dump(), bpmn_xml=xml, current_version=1)
+    pmap = ProcessMap(
+        project_id=project_id, transcript_id=transcript_id, model=model.model_dump(), bpmn_xml=xml, current_version=1
+    )
     db.add(pmap)
     db.flush()
-    db.add(MapVersion(map_id=pmap.id, version=1, source="extract", model=pmap.model, bpmn_xml=xml))
+    db.add(MapVersion(map_id=pmap.id, version=1, source=source, model=pmap.model, bpmn_xml=xml))
     return pmap
 
 

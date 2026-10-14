@@ -1,16 +1,21 @@
+import re
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Response
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import maps
-from app.db.base import get_db
+from app.audit import audit
+from app.auth import DB
 from app.db.models import ProcessMap, Transcript
 from app.llm.provider import LiteLLMProvider, LLMProvider
 from app.models.process import ProcessModel
 from app.pipeline.edit import OpError, plan_edit
+from app.pipeline.export import ExportError, render_image, sop_markdown
 from app.pipeline.parse_bpmn import BpmnImportError, read_bpmn
 from app.pipeline.validate import ValidationError, validate
 
@@ -24,7 +29,6 @@ def get_llm() -> LLMProvider:
     return LiteLLMProvider()
 
 
-DB = Annotated[Session, Depends(get_db)]
 LLM = Annotated[LLMProvider, Depends(get_llm)]
 
 
@@ -37,7 +41,8 @@ class SegmentOut(BaseModel):
 
 class MapOut(BaseModel):
     id: str
-    transcript_id: str
+    project_id: str
+    transcript_id: str | None  # None for a project's merged map
     version: int
     can_undo: bool
     model: dict[str, Any]
@@ -70,18 +75,31 @@ def _load(db: Session, map_id: str) -> ProcessMap:
     return pmap
 
 
+def _segments(db: Session, pmap: ProcessMap) -> tuple[list[SegmentOut], bool | None]:
+    """A transcript map cites `s3`; a merged map cites `<transcript_id>:s3` across meetings."""
+    if pmap.transcript_id is not None:
+        t = db.get_one(Transcript, pmap.transcript_id)
+        return [SegmentOut.model_validate(s) for s in t.segments or []], t.diarization_available
+    out, diarized = [], None
+    for t in db.scalars(select(Transcript).where(Transcript.project_id == pmap.project_id)):
+        out += [SegmentOut.model_validate({**s, "segment_id": f"{t.id}:{s['segment_id']}"}) for s in t.segments or []]
+        diarized = False if t.diarization_available is False else diarized
+    return out, diarized
+
+
 def _out(db: Session, pmap: ProcessMap) -> MapOut:
-    transcript = db.get_one(Transcript, pmap.transcript_id)
+    segments, diarized = _segments(db, pmap)
     return MapOut(
         id=pmap.id,
+        project_id=pmap.project_id,
         transcript_id=pmap.transcript_id,
         version=pmap.current_version,
         can_undo=pmap.current_version > 1,
         model=pmap.model,
         bpmn_xml=pmap.bpmn_xml,
         errors=validate(ProcessModel.model_validate(pmap.model)),
-        segments=[SegmentOut.model_validate(s) for s in transcript.segments or []],
-        diarization_available=transcript.diarization_available,
+        segments=segments,
+        diarization_available=diarized,
     )
 
 
@@ -102,6 +120,7 @@ def chat_edit(map_id: str, body: ChatIn, db: DB, llm: LLM) -> ChatOut:
     ops = [op.model_dump() for op in plan.ops]
     if ops:  # a clarifying question changes nothing and creates no version
         maps.commit_version(db, pmap, model, "chat", maps.current_positions(pmap), ops, body.instruction)
+        audit(db, "edit", "map", pmap.id, via="chat", version=pmap.current_version, ops=len(ops))
         db.commit()
     return ChatOut(**_out(db, pmap).model_dump(), reply=plan.reply, ops=ops)
 
@@ -113,6 +132,7 @@ def undo(map_id: str, db: DB) -> MapOut:
         maps.undo(db, pmap)
     except maps.NothingToUndo:
         raise HTTPException(409, "Nothing to undo") from None
+    audit(db, "edit", "map", pmap.id, via="undo", version=pmap.current_version)
     db.commit()
     return _out(db, pmap)
 
@@ -129,6 +149,7 @@ def save_bpmn(map_id: str, db: DB, xml: Annotated[bytes, Body(media_type="applic
     except BpmnImportError as e:
         raise HTTPException(422, str(e)) from e
     maps.commit_version(db, pmap, model, "visual", positions)
+    audit(db, "edit", "map", pmap.id, via="visual", version=pmap.current_version)
     db.commit()
     return _out(db, pmap)
 
@@ -137,3 +158,40 @@ def save_bpmn(map_id: str, db: DB, xml: Annotated[bytes, Body(media_type="applic
 def list_versions(map_id: str, db: DB) -> list[VersionOut]:
     _load(db, map_id)
     return [VersionOut.model_validate(v, from_attributes=True) for v in maps.versions(db, map_id)]
+
+
+EXPORT_TYPES = {
+    "bpmn": "application/xml",
+    "svg": "image/svg+xml",
+    "png": "image/png",
+    "md": "text/markdown; charset=utf-8",
+}
+
+
+@router.get("/{map_id}/export/{fmt}")
+async def export(map_id: str, fmt: Literal["bpmn", "svg", "png", "md"], db: DB) -> Response:
+    """Download the current version: BPMN 2.0 XML, SVG/PNG (rendered by bpmn-js), or a
+    Markdown SOP whose steps cite their transcript quotes."""
+    pmap = _load(db, map_id)
+    model = ProcessModel.model_validate(pmap.model)
+    if fmt == "bpmn":
+        body: bytes = pmap.bpmn_xml.encode()
+    elif fmt == "md":
+        segments, _ = _segments(db, pmap)
+        sources = {
+            t.id: t.filename for t in db.scalars(select(Transcript).where(Transcript.project_id == pmap.project_id))
+        }
+        body = sop_markdown(model, {s.segment_id: s.model_dump() for s in segments}, sources).encode()
+    else:
+        try:
+            body = await run_in_threadpool(render_image, pmap.bpmn_xml, fmt)  # sync Playwright, off the event loop
+        except ExportError as e:
+            raise HTTPException(503, str(e)) from e
+    audit(db, "export", "map", pmap.id, format=fmt, version=pmap.current_version)
+    db.commit()
+    filename = re.sub(r"[^\w-]+", "_", model.name).strip("_") or "process"
+    return Response(
+        body,
+        media_type=EXPORT_TYPES[fmt],
+        headers={"Content-Disposition": f'attachment; filename="{filename}.{fmt}"'},
+    )

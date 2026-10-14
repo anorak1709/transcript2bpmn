@@ -1,0 +1,22 @@
+{
+  "name": "Onboarding (IT view)",
+  "lanes": [
+    {"id": "lane_hr", "name": "HR"},
+    {"id": "lane_mgr", "name": "Hiring Manager"},
+    {"id": "lane_it", "name": "IT"}
+  ],
+  "nodes": [
+    {"id": "start", "type": "start_event", "name": "Offer letter signed", "lane_id": "lane_hr", "source_segment_ids": ["s1"], "confidence": 1.0},
+    {"id": "t_rec", "type": "user_task", "name": "Create employee in Workday", "lane_id": "lane_hr", "source_segment_ids": ["s1"], "confidence": 1.0},
+    {"id": "t_orient", "type": "user_task", "name": "Run first-day orientation", "lane_id": "lane_mgr", "source_segment_ids": ["s2"], "confidence": 1.0},
+    {"id": "t_laptop", "type": "user_task", "name": "Order laptop and set up accounts", "lane_id": "lane_it", "source_segment_ids": ["s2"], "confidence": 1.0},
+    {"id": "end", "type": "end_event", "name": "Employee onboarded", "lane_id": "lane_it", "source_segment_ids": ["s2"], "confidence": 1.0}
+  ],
+  "flows": [
+    {"id": "f1", "source_id": "start", "target_id": "t_rec", "condition": null},
+    {"id": "f2", "source_id": "t_rec", "target_id": "t_orient", "condition": null},
+    {"id": "f3", "source_id": "t_orient", "target_id": "t_laptop", "condition": null},
+    {"id": "f4", "source_id": "t_laptop", "target_id": "end", "condition": null}
+  ],
+  "open_questions": []
+}

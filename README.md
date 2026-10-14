@@ -5,9 +5,9 @@ Converts English meeting transcripts into BPMN 2.0 process maps (Camunda/Signavi
 **Core rule:** the LLM never writes BPMN XML. It extracts a typed `ProcessModel`
 (`app/models/process.py`); deterministic code validates it and converts it to BPMN.
 
-Status: **Phase 3**: text and audio → validated BPMN, editable in the browser (visual
-editor + chat), with version history and undo. Not yet built: multi-meeting merge,
-auth/multi-tenancy, exports (Phase 4).
+Status: **Phase 4**: multi-tenant API (orgs + API keys) with projects that merge several
+meetings into one map, conflict detection, retention, project deletion, an audit log, and
+exports (BPMN, SVG/PNG, SOP). Out of scope: billing, SSO/SAML, self-hosted models.
 
 ## Pipeline
 
@@ -42,13 +42,48 @@ upload ─► ingest ─► normalize ─► extract (filter, extract) ─► va
 - **Convert** (`convert.py`): see *Layout* below. Output is validated against the official
   OMG BPMN 2.0 XSD (`app/pipeline/xsd/`) before it is stored.
 
+## Organizations, keys, auth
+
+Every endpoint except `/health` and the editor's static page needs an API key:
+`Authorization: Bearer t2b_…` (or `X-API-Key`). Keys belong to an organization and are
+issued by an operator (there's no signup or SSO yet):
+
+```bash
+uv run python -m app.cli create-org "Acme Corp"      # prints org id + first key (shown once)
+uv run python -m app.cli create-key <org_id> --name ci
+uv run python -m app.cli revoke-key <prefix>
+```
+
+Only a SHA-256 of each key is stored. The editor asks for a key once and keeps it in that
+browser's localStorage.
+
+**Isolation** (`app/db/tenancy.py`): every table except `organizations` carries
+`organization_id`. Scoping is enforced once, at the SQLAlchemy session, not per query:
+- every ORM statement in a request session (selects, `get`, lazy loads, bulk update/delete)
+  gets `organization_id = <caller's org>` added automatically;
+- inserts are stamped with the caller's org, and rows for another org are refused;
+- a session with no org and no explicit `system_session()` refuses to run queries at all
+  (fails closed).
+
+Another org's ids return 404, the same as ids that don't exist. `tests/test_tenancy.py`
+walks every route from the OpenAPI schema with a second org's key (a new route is covered
+automatically) and checks the session layer directly.
+
+Data created before tenancy was migrated into "Default organization"
+(`00000000-0000-0000-0000-000000000001`, project "Imported"). Give it a key with `create-key`.
+
 ## API
 
 | Endpoint | |
 |---|---|
-| `POST /transcripts` (multipart `file`) | upload; stores raw file in S3/MinIO + row in Postgres |
-| `POST /transcripts/{id}/process` | enqueue the pipeline (arq); returns the job |
-| `GET /jobs/{id}` | `queued → (transcribing) → normalizing → extracting → converting → done \| failed` (+ `error`, `map_id`) |
+| `POST /projects` `{name, retention_days?}` · `GET /projects` · `GET /projects/{id}` | a project groups meetings about one process |
+| `DELETE /projects/{id}` | removes every row and stored object of the project (counts returned) |
+| `POST /projects/{id}/transcripts` (multipart `file`) | upload text or audio into a project |
+| `POST /transcripts/{id}/process` | enqueue: transcribe → extract → own map → **merge into the project map** |
+| `GET /jobs/{id}` | `queued → (transcribing) → normalizing → extracting → converting → merging → done \| failed` |
+| `GET /projects/{id}/conflicts[?status=open]` · `POST /conflicts/{id}/resolve` | meetings that disagree |
+| `GET /maps/{id}/export/{bpmn,svg,png,md}` | BPMN 2.0 XML, diagram image, Markdown SOP |
+| `GET /audit` | who uploaded / processed / edited / exported / deleted what |
 | `GET /maps/{id}` | `{model, bpmn_xml, version, can_undo, errors, segments}`. The model is canonical; XML is derived |
 | `POST /maps/{id}/chat` `{instruction}` | LLM returns patch ops → applied → new version (`reply`, `ops` in response) |
 | `PUT /maps/{id}/bpmn` (body: BPMN XML) | save from the visual editor → parsed back into the model → new version |
@@ -57,11 +92,92 @@ upload ─► ingest ─► normalize ─► extract (filter, extract) ─► va
 | `GET /editor/{map_id}` | bpmn-js editor (`/viewer/{id}` still works). `?select=<node_id>` deep-links a step |
 
 ```bash
-curl -F file=@eval/gold/01_invoice_approval/transcript.vtt localhost:8000/transcripts
-curl -X POST localhost:8000/transcripts/<id>/process
-curl localhost:8000/jobs/<job_id>          # until status=done
-open http://localhost:8000/editor/<map_id>
+H="Authorization: Bearer $T2B_KEY"
+P=$(curl -sH "$H" -H 'Content-Type: application/json' -d '{"name":"Invoices"}' localhost:8000/projects | jq -r .id)
+T=$(curl -sH "$H" -F file=@eval/gold/01_invoice_approval/transcript.vtt localhost:8000/projects/$P/transcripts | jq -r .id)
+curl -sH "$H" -X POST localhost:8000/transcripts/$T/process
+curl -sH "$H" localhost:8000/projects/$P          # merged_map_id once the job is done
+open http://localhost:8000/editor/<merged_map_id>
 ```
+
+## Multi-meeting merge
+
+`app/pipeline/merge.py`. Every processed transcript gets its own map, then is folded into
+its project's **merged map**. The first meeting seeds it; each later one is merged on top,
+including whatever users have edited since.
+
+1. **Entity resolution:** lanes and nodes are matched one-to-one by embedding similarity
+   (`MODEL_EMBED`; tasks embed name + role, events and gateways name only). Above
+   `MERGE_AUTO_MATCH` (0.90) it's the same element; below `MERGE_REJECT` (0.70) it's different.
+   Pairs in between are sent in one batch to the LLM ("merge" role, `MODEL_MERGE`) to confirm.
+2. **Patch ops only:** matched nodes gain the new meeting's citations; new steps and roles
+   are added; a new step between two existing ones replaces their direct link. Existing names
+   and owners are never overwritten. The op list is stored on the map version
+   (`source: merge`), so it can be replayed and undone.
+3. **Conflicts, never silent:** `owner` (a different role does a matched step), `order`
+   (two known steps reversed; the edge is not added), `condition` (same decision path,
+   different condition; the existing one is kept), and `sequence` (a step gains a second
+   "next" outside a gateway). Each becomes a `conflicts` row plus an open question on the map.
+   The editor's "Mark resolved" (or `POST /conflicts/{id}/resolve`) closes it.
+
+Merged-map citations are qualified (`<transcript_id>:s3`), so each node lists every meeting
+and line it came from, and the editor shows quotes across meetings.
+
+**Merge eval:** `eval/gold_merge/<case>/` holds `transcript_N`, gold `model_N.json`, gold
+merged `expected.json`, and `expected_conflicts` in `meta.yaml`. Metrics are the single-map
+ones plus **duplicate task rate** and **conflict detection recall**.
+
+```bash
+uv run python -m eval.merge_eval                                                # real: extract + merge
+uv run python -m eval.merge_eval --pipeline eval.merge_eval:gold_extraction_pipeline   # merge only
+```
+
+## Data handling
+
+- **Retention:** `retention_days` per project. A daily arq cron (03:00) deletes each expired
+  transcript's raw file and its text (segments), and marks it `content_expired`. Maps keep
+  working; source quotes show "no longer available"; re-processing returns 410.
+- **Delete project:** `DELETE /projects/{id}` removes the project's transcripts, jobs, maps,
+  versions, conflicts and every stored object (all under `orgs/<org>/projects/<id>/`).
+- **Audit log** (`audit_log`): create, upload, process, merge, edit (chat/visual/undo),
+  resolve_conflict, export, delete, retention_purge, with the API key that did it.
+  Entries hold metadata only (ids, counts, formats, never meeting text), so they are kept
+  when a project is deleted, including the record of the deletion itself.
+
+## Exports
+
+`GET /maps/{id}/export/{fmt}`:
+- `bpmn`: the XSD-valid BPMN 2.0 XML.
+- `svg` / `png`: rendered by the same bpmn-js the editor uses, in headless Chromium via
+  Playwright, so exports match the editor exactly. bpmn-js is bundled
+  (`app/static/vendor/`), so the server makes no CDN calls. Needs
+  `playwright install chromium` (it's in the Docker image), or set
+  `EXPORT_BROWSER_CHANNEL=chrome` to use a local Chrome.
+- `md`: a written SOP (roles, numbered steps with owners, decisions with their conditions,
+  parallel work, outcomes, open questions). Every step quotes the transcript lines it came
+  from, with speaker, meeting and timestamp.
+
+## Switching to Azure OpenAI
+
+Config only. Set `LLM_PROVIDER=azure`, `LLM_API_BASE`, `LLM_API_VERSION`, `LLM_API_KEY`, the
+`MODEL_*` deployment names (incl. `MODEL_EMBED`), and for audio `TRANSCRIBE_PROVIDER=azure`
++ `TRANSCRIBE_MODEL=<deployment>`. A missing endpoint or version fails at startup.
+
+- **Unit proof:** `tests/test_llm_provider.py::test_azure_is_config_only_for_every_model_call`
+  checks that structured calls, embeddings and transcription all go to the Azure endpoint and
+  deployments when only the env changes.
+- **Live proof** (manual, or the `smoke` CI job with secrets):
+  `uv run python -m eval.smoke --audio eval/asr/samples/invoice_approval.m4a` runs both
+  invoice meetings through filter, extract, repair, embed + merge, BPMN/XSD, SOP and
+  transcription against the configured provider, and exits non-zero on any failure.
+
+## CI
+
+`.github/workflows/ci.yml`: the `test` job (lint + full suite with Postgres/Redis/MinIO,
+ffmpeg and Chromium) runs on every push and PR. The `smoke` job runs the live pipeline for
+`openai` and `azure` on demand and weekly, only where credentials are configured
+(secrets: `OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`; variables:
+model/deployment names per role, `AZURE_OPENAI_API_VERSION`).
 
 ## Editing
 
@@ -192,13 +308,18 @@ app/api/        FastAPI routers
 app/core/       settings (pydantic-settings), logging
 app/llm/        LLMProvider interface + LiteLLM implementation
 app/models/     ProcessModel schema
-app/pipeline/   ingest, transcribe/, normalize, extract, validate, convert, edit, parse_bpmn, run
+app/pipeline/   ingest, transcribe/, normalize, extract, validate, convert, edit, parse_bpmn, merge, export, run
 app/static/     editor.html (bpmn-js Modeler)
 app/maps.py     map versions: create / commit / undo
+app/projects.py merge into project, delete project, retention
+app/auth.py     API keys -> org-scoped DB session
+app/audit.py    audit log helper
+app/cli.py      create-org / create-key / revoke-key
+app/db/tenancy.py  session-level tenant isolation
 app/storage.py  S3/MinIO put/get
 app/db/         SQLAlchemy base + Alembic migrations
 app/workers/    arq worker settings
-eval/           gold cases, metrics, runner; asr_benchmark.py + asr/ (audio samples)
+eval/           gold cases, metrics, runner; gold_merge/ + merge_eval.py; asr_benchmark.py + asr/; smoke.py
 ```
 
 ## LLM provider

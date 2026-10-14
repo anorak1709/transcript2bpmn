@@ -1,0 +1,3 @@
+Priya: Once the offer letter is signed we create the employee in Workday.
+Tom: Then the manager runs the first-day orientation, and only after that does IT order the laptop and set up accounts.
+Priya: That's it from HR's side.

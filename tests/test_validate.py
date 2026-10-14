@@ -10,7 +10,7 @@ from app.models.process import Flow, Lane, Node, NodeType, ProcessModel
 from app.models.transcript import Segment
 from app.pipeline.convert import to_bpmn, validate_xsd
 from app.pipeline.validate import MAX_REPAIR_ATTEMPTS, repair, validate
-from tests.conftest import gold_model
+from tests.conftest import gold_model, lexical_embed
 
 T = TypeVar("T", bound=BaseModel)
 BROKEN = Path(__file__).parent / "fixtures" / "broken_extraction.json"
@@ -182,6 +182,9 @@ class ScriptedLLM(LLMProvider):
         if isinstance(r, Exception):
             raise r
         return schema.model_validate(r.model_dump())
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return lexical_embed(texts)
 
 
 def test_valid_model_skips_repair() -> None:

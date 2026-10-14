@@ -5,4 +5,5 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 PATH="/app/.venv/bin:$PATH"
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
+RUN uv run --no-sync playwright install --with-deps chromium  # diagram PNG/SVG export (bpmn-js in headless Chromium)
 COPY . .

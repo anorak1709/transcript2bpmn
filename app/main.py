@@ -7,7 +7,7 @@ from arq.connections import RedisSettings
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
-from app.api import health, maps, pipeline
+from app.api import health, maps, projects
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 
@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="transcript2bpmn", lifespan=lifespan)
 app.include_router(health.router)
-app.include_router(pipeline.router)
+app.include_router(projects.router)
 app.include_router(maps.router)
 
 

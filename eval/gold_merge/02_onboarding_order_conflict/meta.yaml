@@ -1,0 +1,7 @@
+meeting_type: general
+notes: >
+  Synthetic. Meeting 2 claims the laptop is ordered only AFTER orientation; meeting 1 has it
+  in parallel with HR paperwork BEFORE orientation. Must surface an order conflict, add no
+  duplicates, and leave the structure unchanged until a person decides.
+expected_conflicts:
+  - {kind: order, node: "Order laptop and set up accounts"}

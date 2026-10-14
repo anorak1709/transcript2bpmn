@@ -4,12 +4,13 @@ The LLM never rewrites the whole model, so an edit can't silently drop or rename
 the user didn't mention, and every change is a reviewable, replayable list of ops.
 """
 
+from collections.abc import Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from app.llm.provider import LLMProvider
-from app.models.process import TASK_TYPES, Flow, Lane, Node, ProcessModel
+from app.models.process import TASK_TYPES, Flow, Lane, Node, OpenQuestion, ProcessModel
 from app.pipeline.extract import load_prompt
 
 EDIT_PROMPT = "edit_v1"
@@ -116,6 +117,27 @@ PatchOp = (
 )
 
 
+# Merge-only ops (multi-meeting merge, app/pipeline/merge.py). Not offered to the chat LLM:
+# they carry transcript citations, which only extraction may produce.
+class AddExtractedNode(_Op):
+    op: Literal["add_extracted_node"]
+    node: Node
+
+
+class AddSources(_Op):
+    op: Literal["add_sources"]
+    node_id: str
+    segment_ids: list[str]
+
+
+class AddOpenQuestion(_Op):
+    op: Literal["add_open_question"]
+    question: OpenQuestion
+
+
+AnyOp = PatchOp | AddExtractedNode | AddSources | AddOpenQuestion
+
+
 class EditPlan(_Op):
     ops: list[PatchOp]
     reply: str  # one or two sentences back to the user
@@ -125,18 +147,24 @@ class OpError(ValueError):
     pass
 
 
-def apply_ops(model: ProcessModel, ops: list[PatchOp]) -> ProcessModel:
+def apply_ops(model: ProcessModel, ops: Sequence[AnyOp]) -> ProcessModel:
     """Apply ops in order to a copy of `model`. All-or-nothing: raises OpError on the first
     op that references something that doesn't exist (the original model is untouched)."""
-    return _Editor(model.model_copy(deep=True)).apply(ops)
+    return Editor(model.model_copy(deep=True)).apply(ops)
 
 
-class _Editor:
+class Editor:
+    """Applies ops to `m` in place. Use apply_ops() unless you need to inspect the model
+    between ops (the merge does), then keep one Editor so new-id renames carry over."""
+
     def __init__(self, m: ProcessModel) -> None:
         self.m = m
         self.renamed: dict[str, str] = {}  # requested new id -> id actually used
 
-    def apply(self, ops: list[PatchOp]) -> ProcessModel:
+    def resolve(self, wanted: str) -> str:
+        return self.renamed.get(wanted, wanted)
+
+    def apply(self, ops: Sequence[AnyOp]) -> ProcessModel:
         for i, op in enumerate(ops, 1):
             try:
                 getattr(self, op.op)(op)
@@ -282,6 +310,20 @@ class _Editor:
 
     def set_condition(self, op: SetCondition) -> None:
         self.flow(op.source_id, op.target_id).condition = op.condition or None
+
+    def add_extracted_node(self, op: AddExtractedNode) -> None:
+        nid = self.fresh(op.node.id, {n.id for n in self.m.nodes})
+        self.m.nodes.append(op.node.model_copy(update={"id": nid, "lane_id": self.lane(op.node.lane_id)}))
+
+    def add_sources(self, op: AddSources) -> None:
+        n = self.node(op.node_id)
+        n.source_segment_ids = list(dict.fromkeys([*n.source_segment_ids, *op.segment_ids]))
+
+    def add_open_question(self, op: AddOpenQuestion) -> None:
+        q = op.question
+        self.m.open_questions.append(
+            q.model_copy(update={"related_node_ids": [self.resolve(r) for r in q.related_node_ids]})
+        )
 
     def resolve_open_question(self, op: ResolveOpenQuestion) -> None:
         before = len(self.m.open_questions)

@@ -23,6 +23,10 @@ class LLMProvider(ABC):
 
         `metadata` is attached to the trace (e.g. repair attempt number, error codes)."""
 
+    @abstractmethod
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """One embedding vector per text (model: MODEL_EMBED)."""
+
 
 class LiteLLMProvider(LLMProvider):
     """OpenAI Responses API with strict JSON Schema output, via LiteLLM.
@@ -38,16 +42,8 @@ class LiteLLMProvider(LLMProvider):
     def structured(
         self, prompt: str, input: str, schema: type[T], model_role: ModelRole, metadata: dict[str, Any] | None = None
     ) -> T:
-        s = self.settings
-        kwargs: dict[str, Any] = {}
-        if s.llm_api_base:
-            kwargs["api_base"] = s.llm_api_base
-        if s.llm_api_key:
-            kwargs["api_key"] = s.llm_api_key
-        if s.llm_api_version:
-            kwargs["api_version"] = s.llm_api_version
         resp = litellm.responses(
-            model=s.model_for(model_role),
+            model=self.settings.model_for(model_role),
             instructions=prompt,
             input=input,
             text={
@@ -59,10 +55,24 @@ class LiteLLMProvider(LLMProvider):
                 }
             },
             metadata={"model_role": model_role, **(metadata or {})},
-            **kwargs,
+            **self._conn(),
         )
         assert isinstance(resp, ResponsesAPIResponse)  # sync, non-streaming call
         return schema.model_validate_json(resp.output_text)
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        resp = litellm.embedding(model=self.settings.model_for("embed"), input=texts, **self._conn())
+        return [list(d["embedding"]) for d in resp.data]
+
+    def _conn(self) -> dict[str, Any]:
+        s = self.settings
+        return {
+            k: v
+            for k, v in {"api_base": s.llm_api_base, "api_key": s.llm_api_key, "api_version": s.llm_api_version}.items()
+            if v
+        }
 
 
 def _enable_tracing(s: Settings) -> None:
