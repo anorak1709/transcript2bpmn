@@ -136,13 +136,13 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         page.get_by_role("link", name="Open map").click()
         expect(page.locator(".bpmn-canvas svg").first).to_be_visible()
         expect(page.locator('.bpmn-canvas [data-element-id="Node_t_bank"]')).to_be_visible()
-        expect(page.get_by_text("v2")).to_be_visible()
+        expect(page.get_by_text("v2", exact=True)).to_be_visible()
 
         # Apply a conflict option from the Questions tab
         page.get_by_role("tab", name="Questions (3)").click()
         page.get_by_role("button", name="Use: Treasury").click()
         expect(page.get_by_text("Applied to the map")).to_be_visible()
-        expect(page.get_by_text("v3")).to_be_visible()
+        expect(page.get_by_text("v3", exact=True)).to_be_visible()
 
         # Select a step on the canvas -> its transcript quotes
         page.locator('.bpmn-canvas [data-element-id="Node_t_pay"]').click()
@@ -157,8 +157,20 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         page.get_by_label("Describe a change").fill("call it release supplier payment")
         page.keyboard.press("Enter")
         expect(page.get_by_text("Renamed the payment step.")).to_be_visible()
-        expect(page.get_by_text("v4")).to_be_visible()
+        expect(page.get_by_text("v4", exact=True)).to_be_visible()
         page.screenshot(path=str(SHOTS / "e2e-editor.png"))
+
+        # Concurrent edit: another client changes the map behind this editor's back (v4 -> v3).
+        map_id = page.url.rstrip("/").split("/")[-1]
+        assert t.http.post(f"/maps/{map_id}/undo", headers={"If-Match": '"4"'}).status_code == 200
+        page.get_by_role("button", name="Undo").click()  # the editor still thinks it's on v4
+        expect(page.get_by_role("alertdialog", name="Someone else changed this map")).to_be_visible()
+        expect(page.get_by_text("you have v4, it's now v3")).to_be_visible()
+        page.get_by_role("button", name="Reload latest").click()
+        expect(page.get_by_role("alertdialog")).to_be_hidden()
+        expect(page.get_by_text("v3", exact=True)).to_be_visible()
+        assert t.http.get(f"/maps/{map_id}").json()["version"] == 3  # the stale undo wrote nothing
+        page.screenshot(path=str(SHOTS / "e2e-reloaded.png"))
 
         # Settings: create a key, shown once
         page.get_by_role("link", name="Settings").click()
@@ -174,12 +186,12 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         page.screenshot(path=str(SHOTS / "e2e-settings-dark.png"), full_page=True)
         browser.close()
 
-    # The wrong-key attempt at sign-in is the one expected failed request.
-    unexpected = [
-        e for e in errors if not e.startswith("Failed to load resource: the server responded with a status of 401")
-    ]
+    # Exactly two failed requests are part of the script: the wrong key at sign-in (401) and
+    # the deliberately stale undo (412). Anything else (incl. CSP violations) fails the test.
+    expected = ("status of 401", "status of 412")
+    unexpected = [e for e in errors if not any(x in e for x in expected)]
     assert unexpected == [], unexpected
-    assert len(errors) - len(unexpected) == 1
+    assert sorted(x for e in errors for x in expected if x in e) == list(expected)
 
 
 def test_spa_routes_and_redirects(server: str) -> None:

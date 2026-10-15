@@ -23,12 +23,19 @@ def merge_into_project(
     """Fold one transcript's model into the project's merged map. The first transcript seeds
     it; later ones are merged with patch ops on top of whatever the user has edited."""
     new = qualify(model, transcript.id)
+    # Merges into one project run one at a time: lock the project row and re-read it, so two
+    # meetings finishing together can't both create a merged map or merge from a stale base.
+    locked = db.get(Project, project.id, with_for_update=True, populate_existing=True)
+    assert locked is not None
+    project = locked
     if project.merged_map_id is None:
         pmap = maps.create_map(db, project.id, None, new, source="merge")
         project.merged_map_id = pmap.id
         return pmap
 
-    pmap = db.get_one(ProcessMap, project.merged_map_id)
+    locked_map = maps.lock_map(db, project.merged_map_id)  # and wait for any user edit in progress
+    assert locked_map is not None
+    pmap = locked_map
     result = merge(llm, ProcessModel.model_validate(pmap.model), new, transcript.id)
     for c in result.conflicts:
         db.add(

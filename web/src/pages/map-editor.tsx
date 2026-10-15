@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertTriangle,
   ArrowLeft,
+  Download,
   History,
   Loader2,
   Maximize,
@@ -37,7 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { api } from "@/lib/api"
+import { api, downloadText, isStale } from "@/lib/api"
 import { formatDate, formatTimestamp } from "@/lib/format"
 import type { ProcessMap, ProcessNode } from "@/lib/types"
 import { ExportMenu } from "@/pages/project"
@@ -180,6 +181,16 @@ export function MapEditor() {
 
   const query = useQuery({ queryKey: ["map", mapId], queryFn: () => api.map(mapId) })
   const map = query.data
+  // Set when the server has a newer version than this editor (someone else edited).
+  const [stale, setStale] = useState<string | null>(null) // message of a refused (412) edit
+
+  // Check for edits made elsewhere (another person, a meeting being merged) every 15 s.
+  const remote = useQuery({
+    queryKey: ["map-remote", mapId],
+    queryFn: () => api.map(mapId),
+    refetchInterval: 15_000,
+    enabled: !!map,
+  })
 
   const setMap = useCallback(
     (next: ProcessMap) => {
@@ -190,35 +201,69 @@ export function MapEditor() {
     [qc, mapId],
   )
 
+  /** A 412 means our version is behind: stop and let the user choose (never overwrite). */
+  const failed = (e: Error, prefix = "") => {
+    if (isStale(e)) setStale(e.message)
+    else toast.error(prefix + e.message)
+  }
+  /** Save pending diagram edits first; returns the version later requests must build on. */
+  const saveIfDirty = async (): Promise<number> => {
+    if (!dirty) return map!.version
+    const saved = await api.saveBpmn(mapId, await canvas.current!.saveXML(), map!.version)
+    setMap(saved)
+    return saved.version
+  }
+
   const save = useMutation({
-    mutationFn: async () => api.saveBpmn(mapId, await canvas.current!.saveXML()),
+    mutationFn: async () => api.saveBpmn(mapId, await canvas.current!.saveXML(), map!.version),
     onSuccess: (m) => {
       setMap(m)
       toast.success(`Saved as v${m.version}`)
     },
-    onError: (e) => toast.error(`Save failed: ${e.message}`),
+    onError: (e) => failed(e, "Save failed: "),
   })
   const undo = useMutation({
-    mutationFn: () => api.undo(mapId),
+    mutationFn: () => api.undo(mapId, map!.version),
     onSuccess: (m) => {
       setMap(m)
       toast.success(`Back to v${m.version}`)
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => failed(e),
   })
   const send = useMutation({
-    mutationFn: async (text: string) => {
-      if (dirty) setMap(await api.saveBpmn(mapId, await canvas.current!.saveXML())) // chat edits the saved map
-      return api.chat(mapId, text)
-    },
+    mutationFn: async (text: string) => api.chat(mapId, text, await saveIfDirty()), // chat edits the saved map
     onMutate: (text) => setChat((c) => [...c, { role: "user", text }]),
     onSuccess: (res) => {
       setMap(res)
       setChat((c) => [...c, { role: "assistant", text: res.reply || (res.ops.length ? "Done." : "No changes.") }])
       setInstruction("")
     },
-    onError: (e) => setChat((c) => [...c, { role: "error", text: e.message }]),
+    onError: (e) => {
+      if (isStale(e)) failed(e)
+      setChat((c) => [
+        ...c,
+        { role: "error", text: isStale(e) ? "Not applied: the map changed elsewhere." : e.message },
+      ])
+    },
   })
+
+  // Newer version on the server: adopt it silently if nothing local would be lost; with
+  // unsaved edits, show a banner instead (derived here, not stored).
+  const newerElsewhere = remote.data && map && remote.data.version > map.version ? remote.data : null
+  useEffect(() => {
+    if (!newerElsewhere || dirty) return
+    ignoreNextChange.current = true // the re-import fires a change event
+    qc.setQueryData(["map", mapId], newerElsewhere)
+    toast.info(`Updated to v${newerElsewhere.version}: this map was changed elsewhere`)
+  }, [newerElsewhere, dirty, qc, mapId])
+
+  const reloadLatest = async () => {
+    setStale(null)
+    setMap(await api.map(mapId))
+  }
+  const downloadMine = async () => {
+    downloadText(await canvas.current!.saveXML(), `${map!.model.name.replace(/[^\w-]+/g, "_")}-my-changes.bpmn`)
+  }
 
   // Don't lose unsaved diagram edits: in-app navigation and tab close both ask first.
   const blocker = useBlocker(
@@ -239,12 +284,11 @@ export function MapEditor() {
   }
   const resolve = async (conflictId: string, option: number | null) => {
     try {
-      if (dirty) setMap(await api.saveBpmn(mapId, await canvas.current!.saveXML()))
-      await api.resolveConflict(conflictId, option)
+      await api.resolveConflict(conflictId, option, await saveIfDirty())
       setMap(await api.map(mapId))
       toast.success(option == null ? "Marked as resolved" : "Applied to the map")
     } catch (e) {
-      toast.error((e as Error).message)
+      failed(e as Error)
     }
   }
 
@@ -302,6 +346,25 @@ export function MapEditor() {
           </Button>
         </div>
       </div>
+
+      {newerElsewhere && dirty && !stale && (
+        <Alert
+          className="rounded-none border-x-0 border-t-0 border-amber-500/40 bg-amber-50 dark:bg-amber-950/40"
+          role="status"
+        >
+          <AlertTriangle aria-hidden />
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            Someone else saved v{newerElsewhere.version} while you were editing v{map.version}. Saving now would be
+            refused.
+            <Button size="sm" variant="outline" onClick={() => void downloadMine()}>
+              <Download aria-hidden /> Download my version
+            </Button>
+            <Button size="sm" onClick={() => void reloadLatest()}>
+              Reload latest
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(320px,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_400px] lg:grid-rows-1">
         <div className="relative min-h-0 border-b lg:border-b-0 lg:border-r">
@@ -435,6 +498,26 @@ export function MapEditor() {
           </form>
         </aside>
       </div>
+
+      <AlertDialog open={!!stale}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Someone else changed this map</AlertDialogTitle>
+            <AlertDialogDescription>
+              {stale} Nothing was overwritten. Reload to continue from the latest version
+              {dirty ? "; download your unsaved changes first if you want to keep them" : ""}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {dirty && (
+              <Button variant="outline" onClick={() => void downloadMine()}>
+                <Download aria-hidden /> Download my version
+              </Button>
+            )}
+            <AlertDialogAction onClick={() => void reloadLatest()}>Reload latest</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={blocker.state === "blocked"}>
         <AlertDialogContent>

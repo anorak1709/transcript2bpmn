@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -79,6 +79,44 @@ def _load(db: Session, map_id: str) -> ProcessMap:
     return pmap
 
 
+# Optimistic concurrency: GET returns the version as an ETag; edits send it back in If-Match.
+# A mismatch is 412 Precondition Failed (someone else changed the map first). Without the
+# header an edit applies to whatever is current (API clients that don't care).
+IfMatch = Annotated[str | None, Header(alias="If-Match")]
+
+
+def _expected(if_match: str | None) -> int | None:
+    try:
+        return maps.parse_if_match(if_match)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+def _stale(e: maps.StaleVersion, expected: int | None) -> HTTPException:
+    return HTTPException(
+        412,
+        f"This map was changed by someone else since you opened it (you have v{expected}, it's now v{e.current}).",
+        headers={"ETag": f'"{e.current}"'},
+    )
+
+
+def _load_for_edit(db: Session, map_id: str, if_match: str | None) -> ProcessMap:
+    """Lock the map row for this transaction and check the caller's version against it."""
+    expected = _expected(if_match)
+    pmap = maps.lock_map(db, map_id)
+    if pmap is None:
+        raise HTTPException(404, "Map not found")
+    try:
+        maps.check_version(pmap, expected)
+    except maps.StaleVersion as e:
+        raise _stale(e, expected) from None
+    return pmap
+
+
+def _etag(response: Response, pmap: ProcessMap) -> None:
+    response.headers["ETag"] = f'"{pmap.current_version}"'
+
+
 def _segments(db: Session, pmap: ProcessMap) -> tuple[list[SegmentOut], bool | None]:
     """A transcript map cites `s3`; a merged map cites `<transcript_id>:s3` across meetings."""
     if pmap.transcript_id is not None:
@@ -116,14 +154,25 @@ def _out(db: Session, pmap: ProcessMap) -> MapOut:
 
 
 @router.get("/{map_id}")
-def get_map(map_id: str, db: DB) -> MapOut:
-    return _out(db, _load(db, map_id))
+def get_map(map_id: str, db: DB, response: Response) -> MapOut:
+    pmap = _load(db, map_id)
+    _etag(response, pmap)
+    return _out(db, pmap)
 
 
 @router.post("/{map_id}/chat", dependencies=HEAVY)
-def chat_edit(map_id: str, body: ChatIn, db: DB, llm: LLM) -> ChatOut:
-    """Instruction -> LLM patch ops -> applied deterministically -> new version."""
+def chat_edit(map_id: str, body: ChatIn, db: DB, llm: LLM, response: Response, if_match: IfMatch = None) -> ChatOut:
+    """Instruction -> LLM patch ops -> applied deterministically -> new version.
+
+    The LLM call can take seconds, so no row lock is held during it: check the version,
+    plan, then lock and check again before writing (someone may have edited meanwhile)."""
+    expected = _expected(if_match)
     pmap = _load(db, map_id)
+    try:
+        maps.check_version(pmap, expected)
+    except maps.StaleVersion as e:
+        raise _stale(e, expected) from None
+    planned_on = pmap.current_version
     current = ProcessModel.model_validate(pmap.model)
     try:
         model, plan = plan_edit(llm, current, body.instruction)
@@ -131,31 +180,40 @@ def chat_edit(map_id: str, body: ChatIn, db: DB, llm: LLM) -> ChatOut:
         raise HTTPException(422, f"Couldn't apply that edit: {e}") from e
     ops = [op.model_dump() for op in plan.ops]
     if ops:  # a clarifying question changes nothing and creates no version
+        pmap = _load_for_edit(db, map_id, f'"{planned_on}"')  # the ops were planned against this version
         maps.commit_version(db, pmap, model, "chat", maps.current_positions(pmap), ops, body.instruction)
         audit(db, "edit", "map", pmap.id, via="chat", version=pmap.current_version, ops=len(ops))
         db.commit()
+    _etag(response, pmap)
     return ChatOut(**_out(db, pmap).model_dump(), reply=plan.reply, ops=ops)
 
 
 @router.post("/{map_id}/undo")
-def undo(map_id: str, db: DB) -> MapOut:
-    pmap = _load(db, map_id)
+def undo(map_id: str, db: DB, response: Response, if_match: IfMatch = None) -> MapOut:
+    pmap = _load_for_edit(db, map_id, if_match)
     try:
         maps.undo(db, pmap)
     except maps.NothingToUndo:
         raise HTTPException(409, "Nothing to undo") from None
     audit(db, "edit", "map", pmap.id, via="undo", version=pmap.current_version)
     db.commit()
+    _etag(response, pmap)
     return _out(db, pmap)
 
 
 @router.put("/{map_id}/bpmn")
-def save_bpmn(map_id: str, db: DB, xml: Annotated[bytes, Body(media_type="application/xml")]) -> MapOut:
+def save_bpmn(
+    map_id: str,
+    db: DB,
+    response: Response,
+    xml: Annotated[bytes, Body(media_type="application/xml")],
+    if_match: IfMatch = None,
+) -> MapOut:
     """Visual edit: BPMN XML from the editor -> ProcessModel (matched by id) -> new version.
     The editor's node positions are kept; the stored XML is regenerated from the model."""
     if len(xml) > MAX_BPMN_BYTES:
         raise HTTPException(413, "BPMN document too large")
-    pmap = _load(db, map_id)
+    pmap = _load_for_edit(db, map_id, if_match)
     try:
         model, positions = read_bpmn(xml, ProcessModel.model_validate(pmap.model))
     except BpmnImportError as e:
@@ -163,6 +221,7 @@ def save_bpmn(map_id: str, db: DB, xml: Annotated[bytes, Body(media_type="applic
     maps.commit_version(db, pmap, model, "visual", positions)
     audit(db, "edit", "map", pmap.id, via="visual", version=pmap.current_version)
     db.commit()
+    _etag(response, pmap)
     return _out(db, pmap)
 
 

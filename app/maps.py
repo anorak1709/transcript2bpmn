@@ -73,3 +73,33 @@ def undo(db: Session, pmap: ProcessMap) -> None:
 
 def versions(db: Session, map_id: str) -> list[MapVersion]:
     return list(db.scalars(select(MapVersion).where(MapVersion.map_id == map_id).order_by(MapVersion.version)))
+
+
+class StaleVersion(Exception):
+    """The caller edited an older version than the map's current one."""
+
+    def __init__(self, current: int) -> None:
+        super().__init__(f"current version is {current}")
+        self.current = current
+
+
+def parse_if_match(value: str | None) -> int | None:
+    """`If-Match: "3"` (also W/"3" or bare 3) -> 3. None when the header is absent."""
+    if value is None or value.strip() == "*":
+        return None
+    raw = value.strip().removeprefix("W/").strip('"')
+    if not raw.isdigit():
+        raise ValueError('If-Match must be a map version, e.g. "3"')
+    return int(raw)
+
+
+def lock_map(db: Session, map_id: str) -> ProcessMap | None:
+    """Load a map with a row lock held until commit, re-read from the database (not the
+    session cache), so concurrent edits of one map run one at a time and each sees the
+    other's result."""
+    return db.get(ProcessMap, map_id, with_for_update=True, populate_existing=True)
+
+
+def check_version(pmap: ProcessMap, expected: int | None) -> None:
+    if expected is not None and expected != pmap.current_version:
+        raise StaleVersion(pmap.current_version)

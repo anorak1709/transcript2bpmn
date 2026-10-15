@@ -59,8 +59,16 @@ function detail(data: unknown, status: number): string {
   return `Request failed (${status})`
 }
 
-async function request<T>(method: string, path: string, body?: BodyInit, contentType?: string): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: BodyInit,
+  contentType?: string,
+  version?: number,
+): Promise<T> {
   const headers: Record<string, string> = {}
+  // Optimistic concurrency: the server refuses (412) if the map moved past this version.
+  if (version != null) headers["If-Match"] = `"${version}"`
   const key = getApiKey()
   if (key) headers.Authorization = `Bearer ${key}`
   if (contentType) headers["Content-Type"] = contentType
@@ -98,14 +106,15 @@ export const api = {
 
   conflicts: (projectId: string, status?: "open" | "resolved") =>
     request<Conflict[]>("GET", `/projects/${projectId}/conflicts${status ? `?status=${status}` : ""}`),
-  resolveConflict: (id: string, option: number | null) =>
-    request<Conflict>("POST", `/conflicts/${id}/resolve`, json({ option }), "application/json"),
+  resolveConflict: (id: string, option: number | null, mapVersion?: number) =>
+    request<Conflict>("POST", `/conflicts/${id}/resolve`, json({ option }), "application/json", mapVersion),
 
   map: (id: string) => request<ProcessMap>("GET", `/maps/${id}`),
-  chat: (id: string, instruction: string) =>
-    request<ChatResult>("POST", `/maps/${id}/chat`, json({ instruction }), "application/json"),
-  undo: (id: string) => request<ProcessMap>("POST", `/maps/${id}/undo`),
-  saveBpmn: (id: string, xml: string) => request<ProcessMap>("PUT", `/maps/${id}/bpmn`, xml, "application/xml"),
+  chat: (id: string, instruction: string, version: number) =>
+    request<ChatResult>("POST", `/maps/${id}/chat`, json({ instruction }), "application/json", version),
+  undo: (id: string, version: number) => request<ProcessMap>("POST", `/maps/${id}/undo`, undefined, undefined, version),
+  saveBpmn: (id: string, xml: string, version: number) =>
+    request<ProcessMap>("PUT", `/maps/${id}/bpmn`, xml, "application/xml", version),
   versions: (id: string) => request<MapVersion[]>("GET", `/maps/${id}/versions`),
 
   keys: () => request<ApiKey[]>("GET", "/keys"),
@@ -129,6 +138,19 @@ export async function downloadExport(mapId: string, format: "bpmn" | "svg" | "pn
   const a = document.createElement("a")
   a.href = url
   a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/** Someone else changed the map since this client loaded it. */
+export const isStale = (e: unknown) => e instanceof ApiError && e.status === 412
+
+/** Save a file the user made locally (e.g. their unsaved diagram before reloading). */
+export function downloadText(text: string, filename: string, type = "application/xml"): void {
+  const url = URL.createObjectURL(new Blob([text], { type }))
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }

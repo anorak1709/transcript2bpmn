@@ -2,9 +2,9 @@ import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -14,7 +14,7 @@ from app import maps, storage
 from app.audit import audit
 from app.auth import DB, CurrentPrincipal
 from app.core.config import get_settings
-from app.db.models import AuditLog, Conflict, Job, Organization, ProcessMap, Project, Transcript
+from app.db.models import AuditLog, Conflict, Job, Organization, Project, Transcript
 from app.models.process import ProcessModel
 from app.pipeline import ingest
 from app.pipeline.edit import AnyOp, ResolveOpenQuestion, apply_ops
@@ -241,7 +241,12 @@ class ResolveIn(BaseModel):
 
 
 @router.post("/conflicts/{conflict_id}/resolve")
-def resolve_conflict(conflict_id: str, db: DB, body: ResolveIn | None = None) -> ConflictOut:
+def resolve_conflict(
+    conflict_id: str,
+    db: DB,
+    body: ResolveIn | None = None,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,  # merged map version, like map edits
+) -> ConflictOut:
     """Settle a disagreement: apply the chosen option to the merged map (if any) and drop its
     open question, in one new map version."""
     c = db.get(Conflict, conflict_id)
@@ -252,7 +257,17 @@ def resolve_conflict(conflict_id: str, db: DB, body: ResolveIn | None = None) ->
     choice = body.option if body else None
     project = _project(db, c.project_id)
     if project.merged_map_id:
-        pmap = db.get_one(ProcessMap, project.merged_map_id)
+        pmap = maps.lock_map(db, project.merged_map_id)
+        assert pmap is not None
+        try:
+            expected = maps.parse_if_match(if_match)
+            maps.check_version(pmap, expected)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        except maps.StaleVersion as e:
+            raise HTTPException(
+                412, f"The map changed since you loaded it (it's now v{e.current}). Reload and try again."
+            ) from None
         model = ProcessModel.model_validate(pmap.model)
         ops: list[AnyOp] = []
         if choice is not None:
