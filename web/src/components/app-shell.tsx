@@ -34,7 +34,9 @@ export function AppShell() {
             to="/projects"
             className="serif inline-flex min-h-9 shrink-0 items-center text-[1.15rem] leading-none font-[560] tracking-[-0.01em] sm:text-[1.35rem]"
           >
-            Transcript <span className="text-graphite italic">to</span> BPMN
+            <span>
+              Transcript <span className="text-graphite italic">to</span> BPMN
+            </span>
           </NavLink>
           <nav aria-label="Main" className="flex items-center gap-0 sm:gap-1">
             {NAV.map(({ to, label }) => (

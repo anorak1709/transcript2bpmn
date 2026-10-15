@@ -1,5 +1,5 @@
 /* Process dossier design system: see design-system/transcript-to-bpmn/MASTER.md.
-   Paper, ink and a reviewer's oxblood. Light only. Values are contrast-checked there. */
+   Ink-dark paper, warm light text and a reviewer's oxblood. Dark only. Values are contrast-checked there. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -23,6 +23,8 @@
   --color-graphite: var(--graphite);
   --color-oxblood: var(--oxblood);
   --color-oxblood-tint: var(--oxblood-tint);
+  --color-oxblood-deep: var(--oxblood-deep);
+  --color-oxblood-deep-hover: var(--oxblood-deep-hover);
   --color-hairline: var(--hairline);
   --color-rule: var(--rule);
   --color-control: var(--control);
@@ -62,18 +64,21 @@
 }
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  --paper: #fdfbf7;
-  --sheet: #ffffff;
-  --paper-shade: #f4f0e8;
-  --ink: #1a1a1a;
-  --graphite: #5c5a55;
-  --oxblood: #8b2e2a;
-  --oxblood-tint: #f6e9e6;
-  --hairline: #e4ded3;
-  --rule: #cfc8bb;
-  --control: #8c867b;
+  /* contrast on paper: ink 14.9, graphite 7.2, oxblood 5.6, control 4.0; ink on oxblood-deep 6.7 */
+  --paper: #151311;
+  --sheet: #1d1a17;
+  --paper-shade: #26221e;
+  --ink: #ece6da;
+  --graphite: #a8a196;
+  --oxblood: #d4716a; /* text, rules and marks: lifted so it reads on dark */
+  --oxblood-deep: #8b2e2a; /* the brand oxblood, as a filled button behind light text */
+  --oxblood-deep-hover: #9e3732;
+  --oxblood-tint: #33201d;
+  --hairline: #2c2824;
+  --rule: #3b3631;
+  --control: #7a7368;
 
   --background: var(--paper);
   --foreground: var(--ink);
@@ -81,8 +86,8 @@
   --card-foreground: var(--ink);
   --popover: var(--sheet);
   --popover-foreground: var(--ink);
-  --primary: var(--oxblood); /* scarce: the primary action only */
-  --primary-foreground: var(--paper);
+  --primary: var(--oxblood-deep); /* scarce: the primary action only */
+  --primary-foreground: var(--ink);
   --secondary: var(--paper-shade);
   --secondary-foreground: var(--ink);
   --muted: var(--paper-shade);

@@ -126,11 +126,11 @@ def test_main_workflow_in_the_browser(server: str) -> None:
                        primary: cs(primary).backgroundColor }
             }"""
         )
-        assert style["bg"] == "rgb(253, 251, 247)" and style["primary"] == "rgb(139, 46, 42)", style
+        assert style["bg"] == "rgb(21, 19, 17)" and style["primary"] == "rgb(139, 46, 42)", style
         assert "EB Garamond" in style["h1"] and "Lato" in style["body"], style
-        page.keyboard.press("Tab")  # keyboard focus shows the 2px oxblood ring
+        page.keyboard.press("Tab")  # keyboard focus shows the 2px (lifted) oxblood ring
         ring = page.evaluate("() => getComputedStyle(document.activeElement).outlineColor")
-        assert ring == "rgb(139, 46, 42)", ring
+        assert ring == "rgb(212, 113, 106)", ring
         page.get_by_role("link", name="Invoices").click()
         expect(page.get_by_role("heading", name="Invoices")).to_be_visible()
 

@@ -9,26 +9,28 @@ the source of each is noted so it can be revisited deliberately.
 The product's output is process documentation, so the UI reads like a consulting deliverable or
 SOP binder: paper, ink, a reviewer's red pen. Calm and editorial, never "dashboard SaaS".
 
-- Style basis: **E-Ink / Paper** (ui-ux-pro-max style DB: off-white #FDFBF7, ink #1A1A1A).
+- Style basis: **E-Ink / Paper**, inverted: the dossier read at night (warm near-black paper,
+  warm light ink). Light version was built first; the owner preferred dark (2026-10-16).
 - Users: **both, analyst-first**. Power and density where analysts work (tables, editor);
   review and export always obvious for occasional reviewers.
-- Theme: **light only** (DB guidance for the product type: avoid dark by default; diagrams and
-  exports are light). No dark mode, no theme switcher.
+- Theme: **dark only**. No light mode, no theme switcher. Exports (BPMN/SOP/PNG/SVG) stay
+  standard light styling; only the on-screen editor is themed.
 
-## Colour (all contrast measured against paper #FDFBF7)
+## Colour (all contrast measured against paper #151311)
 
 | Token | Value | Use | Contrast |
 |---|---|---|---|
-| `--paper` (background) | `#FDFBF7` | page | |
-| `--sheet` (card) | `#FFFFFF` | sheets/cards on paper (set apart by hairline, not shadow) | |
-| `--paper-shade` (muted) | `#F4F0E8` | hover, selected rows, inset areas | ink 15.3:1 |
-| `--ink` (foreground) | `#1A1A1A` | text, diagram strokes | 16.8:1 |
-| `--graphite` (muted-foreground) | `#5C5A55` | secondary text, labels | 6.7:1 |
-| `--oxblood` (primary/accent) | `#8B2E2A` | **only** disagreements, the primary action, focus ring, destructive outline | 8.1:1 (paper text on it 8.3:1) |
-| `--oxblood-tint` | `#F6E9E6` | disagreement highlight background | oxblood on it 7.0:1 |
-| `--hairline` | `#E4DED3` | decorative rules, sheet borders | decorative |
-| `--rule` | `#CFC8BB` | stronger decorative rules (section dividers) | decorative |
-| `--control` | `#8C867B` | form-control borders (meaningful boundary) | 3.5:1 (≥3:1) |
+| `--paper` (background) | `#151311` | page | |
+| `--sheet` (card) | `#1D1A17` | sheets, inputs, diagram shapes (set apart by hairline, not shadow) | ink 13.9:1 |
+| `--paper-shade` (muted) | `#26221E` | hover, selected rows, inset areas | ink 12.7:1 |
+| `--ink` (foreground) | `#ECE6DA` | text, diagram strokes | 14.9:1 |
+| `--graphite` (muted-foreground) | `#A8A196` | secondary text, labels | 7.2:1 |
+| `--oxblood` (accent) | `#D4716A` | **only** disagreements, focus ring, destructive outline, marks | 5.6:1 (on tint 4.7:1) |
+| `--oxblood-deep` (primary) | `#8B2E2A` | filled primary button (hover `#9E3732`) | ink on it 6.7:1 |
+| `--oxblood-tint` | `#33201D` | disagreement highlight background | |
+| `--hairline` | `#2C2824` | decorative rules, sheet borders | decorative |
+| `--rule` | `#3B3631` | stronger decorative rules (section dividers) | decorative |
+| `--control` | `#7A7368` | form-control borders (meaningful boundary) | 4.0:1 (≥3:1) |
 
 Rules
 - Oxblood is scarce on purpose: if everything is red, nothing is. Never use it for decoration.
@@ -78,7 +80,7 @@ Details ("full dossier", owner's choice)
 
 ## The diagram ("themed to match")
 
-- bpmn-js renders on paper with ink strokes and EB Garamond labels; white sheet fill for tasks.
+- bpmn-js renders on paper with ink strokes and EB Garamond labels; sheet (#1D1A17) fill for tasks, light ink strokes.
 - Steps involved in an open disagreement get an oxblood outline and the disagreement's numeral.
 - **Exports stay standard BPMN** (server-side renderer is untouched).
 

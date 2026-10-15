@@ -47,11 +47,11 @@ export interface BpmnCanvasHandle {
   zoomToFit(): void
 }
 
-// MASTER "themed to match": ink on a white sheet, serif labels. Rendering only: the saved
+// MASTER "themed to match": light ink on a dark sheet, serif labels (hex: bpmn-js needs literals). Rendering only: the saved
 // XML and server-side exports keep standard BPMN styling.
 const SERIF = '"EB Garamond Variable", "EB Garamond", Georgia, serif'
 const THEME = {
-  bpmnRenderer: { defaultFillColor: "#ffffff", defaultStrokeColor: "#1a1a1a", defaultLabelColor: "#1a1a1a" },
+  bpmnRenderer: { defaultFillColor: "#1d1a17", defaultStrokeColor: "#ece6da", defaultLabelColor: "#ece6da" },
   textRenderer: {
     defaultStyle: { fontFamily: SERIF, fontSize: 14, fontWeight: 500, lineHeight: 1.15 },
     externalStyle: { fontFamily: SERIF, fontSize: 13, fontWeight: 500, lineHeight: 1.15 },
