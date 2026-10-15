@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -10,16 +10,19 @@ from sqlalchemy.orm import Session
 
 from app import maps
 from app.audit import audit
-from app.auth import DB
-from app.db.models import ProcessMap, Transcript
+from app.auth import DB, CurrentPrincipal
+from app.db.models import Conflict, ProcessMap, Transcript
 from app.llm.provider import LiteLLMProvider, LLMProvider
+from app.metrics import EXPORTS
 from app.models.process import ProcessModel
 from app.pipeline.edit import OpError, plan_edit
 from app.pipeline.export import ExportError, render_image, sop_markdown
 from app.pipeline.parse_bpmn import BpmnImportError, read_bpmn
 from app.pipeline.validate import ValidationError, validate
+from app.ratelimit import rate_limit
 
-router = APIRouter(prefix="/maps")
+router = APIRouter(prefix="/maps", dependencies=[Depends(rate_limit("api"))])
+HEAVY = [Depends(rate_limit("heavy"))]
 
 MAX_BPMN_BYTES = 5 * 1024 * 1024
 
@@ -50,6 +53,7 @@ class MapOut(BaseModel):
     errors: list[ValidationError]  # live validation of the current version
     segments: list[SegmentOut]  # transcript lines, so the editor can show a node's source quotes
     diarization_available: bool | None
+    conflicts: list[dict[str, Any]]  # merged maps: open disagreements between meetings, with options
 
 
 class ChatIn(BaseModel):
@@ -100,6 +104,14 @@ def _out(db: Session, pmap: ProcessMap) -> MapOut:
         errors=validate(ProcessModel.model_validate(pmap.model)),
         segments=segments,
         diarization_available=diarized,
+        conflicts=[
+            {"id": c.id, "kind": c.kind, "options": c.options}
+            for c in db.scalars(
+                select(Conflict).where(Conflict.project_id == pmap.project_id, Conflict.status == "open")
+            )
+        ]
+        if pmap.transcript_id is None
+        else [],
     )
 
 
@@ -108,7 +120,7 @@ def get_map(map_id: str, db: DB) -> MapOut:
     return _out(db, _load(db, map_id))
 
 
-@router.post("/{map_id}/chat")
+@router.post("/{map_id}/chat", dependencies=HEAVY)
 def chat_edit(map_id: str, body: ChatIn, db: DB, llm: LLM) -> ChatOut:
     """Instruction -> LLM patch ops -> applied deterministically -> new version."""
     pmap = _load(db, map_id)
@@ -169,7 +181,9 @@ EXPORT_TYPES = {
 
 
 @router.get("/{map_id}/export/{fmt}")
-async def export(map_id: str, fmt: Literal["bpmn", "svg", "png", "md"], db: DB) -> Response:
+async def export(
+    map_id: str, fmt: Literal["bpmn", "svg", "png", "md"], db: DB, request: Request, who: CurrentPrincipal
+) -> Response:
     """Download the current version: BPMN 2.0 XML, SVG/PNG (rendered by bpmn-js), or a
     Markdown SOP whose steps cite their transcript quotes."""
     pmap = _load(db, map_id)
@@ -183,11 +197,13 @@ async def export(map_id: str, fmt: Literal["bpmn", "svg", "png", "md"], db: DB) 
         }
         body = sop_markdown(model, {s.segment_id: s.model_dump() for s in segments}, sources).encode()
     else:
+        await rate_limit("heavy")(request, who)  # image renders cost real CPU
         try:
             body = await run_in_threadpool(render_image, pmap.bpmn_xml, fmt)  # sync Playwright, off the event loop
         except ExportError as e:
             raise HTTPException(503, str(e)) from e
     audit(db, "export", "map", pmap.id, format=fmt, version=pmap.current_version)
+    EXPORTS.labels(fmt).inc()
     db.commit()
     filename = re.sub(r"[^\w-]+", "_", model.name).strip("_") or "process"
     return Response(

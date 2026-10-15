@@ -55,6 +55,7 @@ def victim(tenant: TenantCtx) -> dict[str, str]:
         "conflict_id": conflict.id,
         "org_id": tenant.org_id,
         "fmt": "md",  # exports: another org must not get an SOP (or any format) of this map
+        "key_id": tenant.client.get("/keys").json()[0]["id"],  # can't see or revoke another org's key
     }
 
 

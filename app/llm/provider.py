@@ -10,6 +10,7 @@ from openai.lib._pydantic import (
 from pydantic import BaseModel
 
 from app.core.config import ModelRole, Settings, get_settings
+from app.metrics import timed_llm_call
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -42,28 +43,30 @@ class LiteLLMProvider(LLMProvider):
     def structured(
         self, prompt: str, input: str, schema: type[T], model_role: ModelRole, metadata: dict[str, Any] | None = None
     ) -> T:
-        resp = litellm.responses(
-            model=self.settings.model_for(model_role),
-            instructions=prompt,
-            input=input,
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": schema.__name__,
-                    "schema": to_strict_json_schema(schema),
-                    "strict": True,
-                }
-            },
-            metadata={"model_role": model_role, **(metadata or {})},
-            **self._conn(),
-        )
+        with timed_llm_call(model_role):
+            resp = litellm.responses(
+                model=self.settings.model_for(model_role),
+                instructions=prompt,
+                input=input,
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": schema.__name__,
+                        "schema": to_strict_json_schema(schema),
+                        "strict": True,
+                    }
+                },
+                metadata={"model_role": model_role, **(metadata or {})},
+                **self._conn(),
+            )
         assert isinstance(resp, ResponsesAPIResponse)  # sync, non-streaming call
         return schema.model_validate_json(resp.output_text)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        resp = litellm.embedding(model=self.settings.model_for("embed"), input=texts, **self._conn())
+        with timed_llm_call("embed"):
+            resp = litellm.embedding(model=self.settings.model_for("embed"), input=texts, **self._conn())
         return [list(d["embedding"]) for d in resp.data]
 
     def _conn(self) -> dict[str, Any]:

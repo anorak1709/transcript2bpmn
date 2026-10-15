@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     job_queue: str = "arq:queue"  # API enqueues here, worker consumes here
 
+    # Browser origins allowed to call the API cross-origin (JSON list). Empty = same-origin only.
+    cors_origins: list[str] = []
+    # Prometheus: GET /metrics needs `Authorization: Bearer <token>`; unset disables it.
+    metrics_token: str | None = None
+    metrics_port: int = 9100  # worker's exporter
+
+    # Per API key, per minute. 0 disables. "heavy" = upload, process, chat, image export.
+    rate_limit_per_minute: int = 300
+    rate_limit_heavy_per_minute: int = 30
+
     s3_endpoint_url: str = "http://localhost:9000"
     s3_access_key: str = "minioadmin"
     s3_secret_key: str = "minioadmin"
@@ -42,6 +52,9 @@ class Settings(BaseSettings):
     transcribe_api_base: str | None = None  # Azure: falls back to LLM_API_BASE
     transcribe_api_version: str | None = None  # Azure only; falls back to LLM_API_VERSION
     transcribe_chunk_seconds: int = 600  # keeps each request well under the 25 MB API limit
+    deepgram_api_key: str | None = None  # TRANSCRIBE_PROVIDER=deepgram
+    deepgram_api_base: str = "https://api.deepgram.com"
+    deepgram_diarize: bool = True
     transcribe_chunk_overlap_seconds: float = 3.0  # audio shared by neighbouring chunks (no word cut in half)
 
     # Diagram image export (headless Chromium). None = Playwright's bundled Chromium;

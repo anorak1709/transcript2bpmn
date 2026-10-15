@@ -23,6 +23,8 @@ class Organization(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(255))
+    # Transcripts this org may process per calendar month (UTC). None = unlimited.
+    monthly_jobs_quota: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = _created()
 
 
@@ -139,6 +141,7 @@ class Conflict(Tenant, Base):
     sources: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     node_ids: Mapped[list[str]] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(16), default="open")  # open | resolved
+    resolution: Mapped[str | None] = mapped_column(Text)  # the option applied; None = fixed by hand
     created_at: Mapped[datetime] = _created()
 
 

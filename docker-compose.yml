@@ -27,7 +27,9 @@ services:
 
   api:
     build: .
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # --proxy-headers: trust X-Forwarded-Proto from the TLS proxy (caddy) so HSTS/redirects work.
+    # In production don't publish 8000; only the proxy should reach the API.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"
     env_file: [{path: .env, required: false}]
     environment: &svc_env
       DATABASE_URL: postgresql+psycopg://app:app@postgres:5432/app
@@ -42,10 +44,25 @@ services:
   worker:
     build: .
     command: arq app.workers.settings.WorkerSettings
+    ports: ["9100:9100"]  # Prometheus job metrics (METRICS_PORT)
     env_file: [{path: .env, required: false}]
     environment: *svc_env
     depends_on: [redis]
 
+  # HTTPS in front of the API: `DOMAIN=maps.example.com docker compose --profile tls up -d`.
+  # A public DOMAIN gets a Let's Encrypt certificate; localhost gets Caddy's local CA.
+  caddy:
+    image: caddy:2.10.2
+    profiles: [tls]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    depends_on: [api]
+
 volumes:
+  caddydata:
   pgdata:
   miniodata:

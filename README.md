@@ -23,12 +23,17 @@ upload ─► ingest ─► normalize ─► extract (filter, extract) ─► va
   Unparseable uploads are rejected with 400 at upload time.
 - **Normalize** (`normalize.py`): deterministic filler stripping (um/uh/erm/hmm, "you know"
   only when set off by commas), merge consecutive same-speaker fragments, assign `s1..sN`.
-  Those ids are stored on the transcript and every node cites them. No LLM cleanup pass yet;
-  add one if eval shows the rules aren't enough.
+  Those ids are stored on the transcript and every node cites them. Optional model pass
+  (`NORMALIZE_LLM_CLEANUP=true`, "filter" role, `prompts/cleanup_v1.md`) fixes ASR
+  misrecognitions and false starts per segment. Ids never change, and rewrites that are empty
+  or much longer than the original are rejected.
 - **Extract** (`extract.py`): prompts are versioned files in `app/pipeline/prompts/`
   (`filter_v1.md`, `extract_v1.md`). To change a prompt, add `_v2` and bump the constant, so
   eval reports stay comparable. Invented citation ids are dropped; a node left uncited
   borrows its neighbours' citations with confidence halved, so every node cites ≥1 real segment.
+  **Long meetings:** above `EXTRACT_MAX_CHARS` (60k chars ≈ 15k tokens) the transcript is
+  extracted in windows that overlap by 3 segments. The partial models are folded together
+  with the multi-meeting merge, so a step seen in two windows is matched, not duplicated.
 - **Transcribe** (`app/pipeline/transcribe/`, audio only): see *Audio* below.
 - **Validate/repair** (`validate.py`): deterministic checks, each returning
   `{code, message, node_ids}`: `DUPLICATE_ID`, `INVALID_LANE`, `DANGLING_FLOW`,
@@ -118,7 +123,11 @@ including whatever users have edited since.
    (two known steps reversed; the edge is not added), `condition` (same decision path,
    different condition; the existing one is kept), and `sequence` (a step gains a second
    "next" outside a gateway). Each becomes a `conflicts` row plus an open question on the map.
-   The editor's "Mark resolved" (or `POST /conflicts/{id}/resolve`) closes it.
+   The editor shows one button per option. Picking one **applies it to the map** (reassigns
+   the step's role, sets the condition, keeps one "next" step, or swaps two adjacent steps)
+   in the same version that closes the question: `POST /conflicts/{id}/resolve {"option": i}`.
+   `{"option": null}` ("I fixed it myself") just closes it. Options that need a judgement call
+   (reordering steps that aren't adjacent) return 422 with what to do instead.
 
 Merged-map citations are qualified (`<transcript_id>:s3`), so each node lists every meeting
 and line it came from, and the editor shows quotes across meetings.
@@ -171,6 +180,38 @@ Config only. Set `LLM_PROVIDER=azure`, `LLM_API_BASE`, `LLM_API_VERSION`, `LLM_A
   invoice meetings through filter, extract, repair, embed + merge, BPMN/XSD, SOP and
   transcription against the configured provider, and exits non-zero on any failure.
 
+## Operations
+
+- **HTTPS:** `DOMAIN=maps.example.com docker compose --profile tls up -d` puts Caddy
+  (`deploy/Caddyfile`) in front of the API with automatic Let's Encrypt certificates
+  (`localhost` gets Caddy's local CA). The API runs with `--proxy-headers`, so it knows the
+  request was HTTPS and sends HSTS. In production don't publish port 8000.
+- **Security headers:** every response gets `nosniff`, `no-referrer` and `X-Frame-Options:
+  DENY`. HTML pages get a strict CSP: same-origin scripts only, no inline script. bpmn-js,
+  its CSS and fonts are vendored (`app/static/vendor/bpmn-js/`), so the browser loads nothing
+  third-party.
+- **CORS:** off unless `CORS_ORIGINS='["https://app.example.com"]'` is set (the editor is
+  same-origin; API clients aren't browsers).
+- **Rate limits** (per API key, Redis fixed one-minute windows): `RATE_LIMIT_PER_MINUTE`
+  (300) for all calls, and `RATE_LIMIT_HEAVY_PER_MINUTE` (30) for upload, process, chat and
+  image export. Over the limit returns 429 with `Retry-After`.
+- **Quotas:** `python -m app.cli set-quota <org_id> 500` caps transcripts processed per
+  calendar month (429 when reached); no number = unlimited. `GET /usage` shows usage and limits.
+- **API keys:** `/settings` page (and `GET/POST /keys`, `DELETE /keys/{id}`): list, create
+  (shown once) and revoke the organization's keys. You can't revoke the last active key.
+  Every change is audited.
+- **Metrics (Prometheus):** API at `GET /metrics` with `Authorization: Bearer $METRICS_TOKEN`
+  (404 when unset); worker exporter on `METRICS_PORT` (9100). Series: `t2b_http_requests_total`
+  / `t2b_http_request_seconds` (by route template, never ids), `t2b_jobs_total{status}`,
+  `t2b_job_stage_seconds{stage}`, `t2b_llm_calls_total{role,outcome}`,
+  `t2b_llm_call_seconds{role}`, `t2b_exports_total{format}`. Langfuse still traces each LLM call.
+- **Backups:** `make backup` (or `scripts/backup.sh [dir]`) writes `db.dump` (pg_dump) and
+  every stored object. `make restore DIR=backups/<ts> [DB=app_restore BUCKET=…]` restores,
+  optionally side by side so you can verify a backup without touching live data. Managed
+  deployments (RDS/S3) should also use provider snapshots and bucket versioning.
+- **Exports** reuse one warm headless Chromium on a dedicated thread (~0.2 s per image after
+  the first).
+
 ## CI
 
 `.github/workflows/ci.yml`: the `test` job (lint + full suite with Postgres/Redis/MinIO,
@@ -202,8 +243,10 @@ change and always passes the XSD before it's stored.
   with its source, and for chat its ops and instruction. Undo moves back one version; a new
   edit after an undo discards the undone ones (a normal undo stack).
 - **Layout preservation:** before regenerating, node positions are read from the current
-  diagram (lane-relative y), so anything the user dragged stays put. New nodes get computed
-  positions and slide right past kept ones. Edge waypoints are always recomputed.
+  diagram (lane-relative y), so anything the user dragged stays put. A step inserted between
+  kept nodes is placed right after its predecessors, and everything downstream shifts right
+  as a group (its arrangement kept) to make room. Hand-drawn edge routes are kept while both
+  ends stay put, and recomputed once either moves.
 - **Editor** (`app/static/editor.html`): bpmn-js Modeler. The side panel shows the selected
   step's transcript quotes (speaker, timestamp, segment id) or "added by you", open questions
   and validation issues (click to jump to the step), and a speaker warning for undiarized
@@ -221,8 +264,11 @@ fallback when no export exists. Requires ffmpeg (`brew install ffmpeg`; it's in 
   `TRANSCRIBE_PROVIDER`.
 - **OpenAI adapter** (`transcribe/openai.py`), model from `TRANSCRIBE_MODEL`:
   - Audio is re-encoded to 16 kHz mono MP3 and split into `TRANSCRIBE_CHUNK_SECONDS` chunks
-    (default 600 s ≈ 3.6 MB, far under the 25 MB API limit). Chunk offsets are measured, and
-    `stitch()` shifts timestamps onto the recording timeline, keeping them monotonic and in bounds.
+    (default 600 s ≈ 3.6 MB, far under the 25 MB API limit). Chunks overlap by
+    `TRANSCRIBE_CHUNK_OVERLAP_SECONDS` (3 s), so a word at a cut is heard whole. Each chunk
+    owns its own 10-minute slice, and `stitch()` keeps a segment only from the chunk that owns
+    its start, so the overlap never duplicates speech. Timestamps are shifted onto the
+    recording timeline and kept monotonic and in bounds.
   - Diarization: models whose name contains `diarize` are called with `diarized_json`.
     Speaker labels restart at "A" on every request, so after chunk 1 the adapter sends 2–10 s
     voice clips of up to 4 speakers as `known_speaker_references`. Later chunks then reuse
@@ -232,7 +278,11 @@ fallback when no export exists. Requires ffmpeg (`brew install ffmpeg`; it's in 
     with approximate timestamps. All speakers are `Unknown speaker`, and
     `transcripts.diarization_available = false` so the UI can ask the user to label speakers.
     Unknown-speaker segments are never merged.
-- **Second provider:** `transcribe/deepgram.py` is a documented stub with the steps to add one.
+- **Deepgram adapter** (`transcribe/deepgram.py`, `TRANSCRIBE_PROVIDER=deepgram`,
+  `TRANSCRIBE_MODEL=nova-3`, `DEEPGRAM_API_KEY`): one request per recording (Deepgram takes up
+  to 2 GB), so there's no chunking and speaker numbers stay consistent all meeting. Audio is
+  re-encoded to MP3 before upload. Uses `utterances` with `diarize`. Compare it with OpenAI via
+  `eval/asr_benchmark.py --configs openai:<model> deepgram:nova-3`.
 
 ### ASR benchmark
 

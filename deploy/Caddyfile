@@ -1,0 +1,5 @@
+# TLS termination for the API + editor. Caddy obtains and renews the certificate itself.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy api:8000
+}

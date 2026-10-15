@@ -9,3 +9,4 @@ eval/reports/
 eval/asr/local/
 tests/.export_check.png
 .build/
+backups/

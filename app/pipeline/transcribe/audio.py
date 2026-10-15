@@ -61,6 +61,11 @@ def _encode(inputs: list[str], out: Path) -> None:
     _run(["ffmpeg", "-nostdin", "-v", "error", "-y", *inputs, *opts, str(out)])
 
 
+def encode_mp3(path: Path, out: Path) -> None:
+    """Whole recording -> 16 kHz mono 48 kbps MP3 (compact upload for providers without chunking)."""
+    _encode(["-i", str(path)], out)
+
+
 def split(path: Path, out_dir: Path, chunk_seconds: int, overlap: float = 0.0) -> list[AudioChunk]:
     """Re-encode to 16 kHz mono 48 kbps MP3 (~3.6 MB per 10 min) and cut into chunks.
 

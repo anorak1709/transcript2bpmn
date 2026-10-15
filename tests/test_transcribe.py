@@ -206,8 +206,8 @@ def test_missing_model_and_unknown_provider_fail_loudly() -> None:
         get_transcriber(_settings(""))
     with pytest.raises(ValueError, match="TRANSCRIBE_PROVIDER"):
         get_transcriber(_settings("m", transcribe_provider="nope"))
-    with pytest.raises(NotImplementedError):
-        get_transcriber(_settings("m", transcribe_provider="deepgram")).transcribe(Path("x.wav"))
+    with pytest.raises(ValueError, match="DEEPGRAM_API_KEY"):
+        get_transcriber(_settings("nova-3", transcribe_provider="deepgram"))
 
 
 def test_wer() -> None:
@@ -222,3 +222,73 @@ def test_speaker_accuracy_maps_labels_by_overlap() -> None:
     # B->Priya, A->Marco by overlap; only "then" is attributed to the wrong person.
     assert speaker_accuracy(ref, hyp) == pytest.approx(7 / 8)
     assert speaker_accuracy(ref, words([_seg(0, 1, "we enter", UNKNOWN_SPEAKER)])) is None
+
+
+DEEPGRAM_REPLY = {  # shape from Deepgram's pre-recorded API docs (utterances=true, diarize=true)
+    "results": {
+        "channels": [{"alternatives": [{"transcript": "We enter the invoice. Finance approves it."}]}],
+        "utterances": [
+            {
+                "start": 0.42,
+                "end": 2.1,
+                "confidence": 0.9,
+                "channel": 0,
+                "transcript": "We enter the invoice.",
+                "words": [],
+                "speaker": 0,
+                "id": "u1",
+            },
+            {
+                "start": 2.4,
+                "end": 4.0,
+                "confidence": 0.9,
+                "channel": 0,
+                "transcript": "Finance approves it.",
+                "words": [],
+                "speaker": 1,
+                "id": "u2",
+            },
+        ],
+    }
+}
+
+
+@needs_ffmpeg
+def test_deepgram_request_and_parsing(tone: Path) -> None:
+    import httpx
+
+    from app.pipeline.transcribe.deepgram import DeepgramTranscriber
+
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"], seen["headers"], seen["body"] = request.url, request.headers, request.read()
+        return httpx.Response(200, json=DEEPGRAM_REPLY)
+
+    client = httpx.Client(
+        base_url="https://api.deepgram.com",
+        transport=httpx.MockTransport(handler),
+        headers={"Authorization": "Token k"},
+    )
+    s = _settings("nova-3", transcribe_provider="deepgram", deepgram_api_key="k")
+    result = DeepgramTranscriber(s, client).transcribe(tone)
+
+    assert seen["url"].path == "/v1/listen"
+    q = dict(seen["url"].params)
+    assert q["model"] == "nova-3" and q["diarize"] == "true" and q["utterances"] == "true"
+    assert seen["headers"]["content-type"] == "audio/mpeg" and seen["body"][:3] in (b"ID3", b"\xff\xfb", b"\xff\xf3")
+    assert len(seen["body"]) < 200_000  # 25 s re-encoded to compact MP3, not the raw WAV
+    assert result.diarization_available is True
+    assert [(x.speaker, x.start_ts, x.text) for x in result.segments] == [
+        ("Speaker 1", 0.42, "We enter the invoice."),
+        ("Speaker 2", 2.4, "Finance approves it."),
+    ]
+
+
+def test_deepgram_without_diarization_or_utterances() -> None:
+    from app.pipeline.transcribe.deepgram import parse_response
+
+    no_speakers = parse_response(DEEPGRAM_REPLY, diarize=False)
+    assert {x.speaker for x in no_speakers.segments} == {UNKNOWN_SPEAKER} and not no_speakers.diarization_available
+    plain = {"results": {"channels": [{"alternatives": [{"transcript": "Short clip."}]}]}}
+    assert [x.text for x in parse_response(plain, diarize=True).segments] == ["Short clip."]

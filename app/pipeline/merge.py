@@ -334,3 +334,67 @@ def _reachable_via(model: ProcessModel, a: str, b: str, through: set[str]) -> bo
                 seen.add(nxt)
                 stack.append(nxt)
     return False
+
+
+class CannotApply(ValueError):
+    """The chosen option needs a judgement call; the user edits the map, then marks it resolved."""
+
+
+def resolution_ops(
+    kind: str, node_ids: list[str], options: list[str], choice: int, model: ProcessModel
+) -> list[edit.AnyOp]:
+    """Patch ops that make the map say what the chosen conflict option says.
+
+    Option 0 is always "keep what the map says" for owner/order/condition conflicts.
+    """
+    if not 0 <= choice < len(options):
+        raise CannotApply(f"option must be 0..{len(options) - 1}")
+    nodes = {n.id: n for n in model.nodes}
+    if any(nid not in nodes for nid in node_ids):
+        raise CannotApply("the steps this conflict refers to were changed or removed; edit the map directly")
+
+    if kind == "owner":
+        (nid,) = node_ids
+        name = options[choice]
+        lane = next((lane.id for lane in model.lanes if lane.name.strip().lower() == name.strip().lower()), None)
+        ops: list[edit.AnyOp] = []
+        if lane is None:
+            lane = "lane_" + "_".join(name.lower().split())[:40]
+            ops.append(edit.AddLane(op="add_lane", id=lane, name=name))
+        ops.append(edit.ReassignLane(op="reassign_lane", node_id=nid, lane_id=lane))
+        return ops
+
+    if kind == "condition":
+        u, v = node_ids
+        return [edit.SetCondition(op="set_condition", source_id=u, target_id=v, condition=options[choice])]
+
+    if kind == "sequence":
+        n, *targets = node_ids
+        keep = targets[choice]
+        return [edit.Disconnect(op="disconnect", source_id=n, target_id=t) for t in targets if t != keep]
+
+    if kind == "order":
+        if choice == 0:
+            return []
+        first, second = node_ids  # the new meeting says `first` comes before `second`
+        out = {(f.source_id, f.target_id): f.condition for f in model.flows}
+        if (second, first) not in out or any(nodes[i].type not in TASK_TYPES for i in node_ids):
+            raise CannotApply("these steps aren't directly next to each other; reorder them in the editor")
+        preds = [(s, c) for (s, t), c in out.items() if t == second]
+        succs = [(t, c) for (s, t), c in out.items() if s == first]
+        ops = []
+        for s, c in preds:  # ... -> second -> first -> ...  becomes  ... -> first -> second -> ...
+            ops += [
+                edit.Disconnect(op="disconnect", source_id=s, target_id=second),
+                edit.Connect(op="connect", source_id=s, target_id=first, condition=c),
+            ]
+        ops += [edit.Disconnect(op="disconnect", source_id=second, target_id=first)]
+        for t, c in succs:
+            ops += [
+                edit.Disconnect(op="disconnect", source_id=first, target_id=t),
+                edit.Connect(op="connect", source_id=second, target_id=t, condition=c),
+            ]
+        ops.append(edit.Connect(op="connect", source_id=first, target_id=second, condition=None))
+        return ops
+
+    raise CannotApply(f"unknown conflict kind {kind!r}")

@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -12,16 +12,19 @@ from sqlalchemy.orm import Session
 
 from app import maps, storage
 from app.audit import audit
-from app.auth import DB
+from app.auth import DB, CurrentPrincipal
 from app.core.config import get_settings
-from app.db.models import AuditLog, Conflict, Job, ProcessMap, Project, Transcript
+from app.db.models import AuditLog, Conflict, Job, Organization, ProcessMap, Project, Transcript
 from app.models.process import ProcessModel
 from app.pipeline import ingest
-from app.pipeline.edit import ResolveOpenQuestion, apply_ops
+from app.pipeline.edit import AnyOp, ResolveOpenQuestion, apply_ops
+from app.pipeline.merge import CannotApply, resolution_ops
 from app.pipeline.transcribe import AUDIO_EXTENSIONS, audio
 from app.projects import delete_project
+from app.ratelimit import check_quota, jobs_this_month, rate_limit
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(rate_limit("api"))])
+HEAVY = [Depends(rate_limit("heavy"))]
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_AUDIO_BYTES = 1024 * 1024 * 1024  # ~1 GB: hours of WAV
@@ -66,6 +69,7 @@ class ConflictOut(BaseModel):
     node_ids: list[str]
     sources: list[dict[str, Any]]
     status: str
+    resolution: str | None
 
 
 class AuditOut(BaseModel):
@@ -132,7 +136,7 @@ def remove_project(project_id: str, db: DB) -> dict[str, int]:
     return counts
 
 
-@router.post("/projects/{project_id}/transcripts", status_code=201)
+@router.post("/projects/{project_id}/transcripts", status_code=201, dependencies=HEAVY)
 async def upload_transcript(project_id: str, file: UploadFile, db: DB) -> TranscriptOut:
     project = _project(db, project_id)
     filename = Path(file.filename or "").name  # never trust a client path
@@ -181,13 +185,14 @@ def _upload_audio(project: Project, file: UploadFile, filename: str, db: Session
     return _transcript_out(t, seconds)
 
 
-@router.post("/transcripts/{transcript_id}/process", status_code=202)
+@router.post("/transcripts/{transcript_id}/process", status_code=202, dependencies=HEAVY)
 async def process_transcript(transcript_id: str, request: Request, db: DB) -> JobOut:
     t = db.get(Transcript, transcript_id)
     if t is None:
         raise HTTPException(404, "Transcript not found")
     if t.content_expired_at is not None:
         raise HTTPException(410, "Transcript content was deleted by the retention policy")
+    check_quota(db, t.organization_id)
     job = Job(transcript_id=transcript_id, status="queued")
     db.add(job)
     db.flush()
@@ -219,26 +224,60 @@ def list_conflicts(project_id: str, db: DB, status: str | None = None) -> list[C
     return [ConflictOut.model_validate(c, from_attributes=True) for c in db.scalars(q)]
 
 
+class ResolveIn(BaseModel):
+    # Index into the conflict's options to apply it to the map; null = "I fixed the map myself".
+    option: int | None = None
+
+
 @router.post("/conflicts/{conflict_id}/resolve")
-def resolve_conflict(conflict_id: str, db: DB) -> ConflictOut:
-    """Mark a disagreement settled (after fixing the map, if needed) and drop its open question."""
+def resolve_conflict(conflict_id: str, db: DB, body: ResolveIn | None = None) -> ConflictOut:
+    """Settle a disagreement: apply the chosen option to the merged map (if any) and drop its
+    open question, in one new map version."""
     c = db.get(Conflict, conflict_id)
     if c is None:
         raise HTTPException(404, "Conflict not found")
+    if c.status != "open":
+        raise HTTPException(409, "Conflict is already resolved")
+    choice = body.option if body else None
     project = _project(db, c.project_id)
-    if c.status == "open" and project.merged_map_id:
+    if project.merged_map_id:
         pmap = db.get_one(ProcessMap, project.merged_map_id)
         model = ProcessModel.model_validate(pmap.model)
+        ops: list[AnyOp] = []
+        if choice is not None:
+            try:
+                ops += resolution_ops(c.kind, c.node_ids, c.options, choice, model)
+            except CannotApply as e:
+                raise HTTPException(422, f"Can't apply that option automatically: {e}") from e
         qid = f"conflict_{c.id}"
         if any(q.id == qid for q in model.open_questions):
-            op = ResolveOpenQuestion(op="resolve_open_question", question_id=qid)
+            ops.append(ResolveOpenQuestion(op="resolve_open_question", question_id=qid))
+        if ops:
             maps.commit_version(
-                db, pmap, apply_ops(model, [op]), "resolve", maps.current_positions(pmap), [op.model_dump()]
+                db, pmap, apply_ops(model, ops), "resolve", maps.current_positions(pmap), [o.model_dump() for o in ops]
             )
-    c.status = "resolved"
-    audit(db, "resolve_conflict", "conflict", c.id, project_id=c.project_id)
+    c.status, c.resolution = "resolved", (c.options[choice] if choice is not None else None)
+    audit(db, "resolve_conflict", "conflict", c.id, project_id=c.project_id, applied_option=choice)
     db.commit()
     return ConflictOut.model_validate(c, from_attributes=True)
+
+
+class UsageOut(BaseModel):
+    jobs_this_month: int
+    monthly_jobs_quota: int | None
+    rate_limit_per_minute: int
+    rate_limit_heavy_per_minute: int
+
+
+@router.get("/usage")
+def usage(db: DB, who: CurrentPrincipal) -> UsageOut:
+    s = get_settings()
+    return UsageOut(
+        jobs_this_month=jobs_this_month(db),
+        monthly_jobs_quota=db.get_one(Organization, who.org_id).monthly_jobs_quota,
+        rate_limit_per_minute=s.rate_limit_per_minute,
+        rate_limit_heavy_per_minute=s.rate_limit_heavy_per_minute,
+    )
 
 
 @router.get("/audit")

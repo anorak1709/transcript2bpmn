@@ -214,3 +214,24 @@ def test_exports(tenant: TenantCtx, monkeypatch: Any) -> None:
         "svg",
         "png",
     }
+
+
+def test_resolving_a_conflict_can_apply_an_option(tenant: TenantCtx) -> None:
+    ctx = merged_project(tenant)
+    m = tenant.client.get(f"/maps/{ctx['merged_map_id']}").json()
+    owner = next(c for c in m["conflicts"] if c["kind"] == "owner")  # the editor gets options with the map
+    assert owner["options"] == ["Finance", "Treasury"]
+
+    r = tenant.client.post(f"/conflicts/{owner['id']}/resolve", json={"option": 1})
+    assert r.status_code == 200 and r.json()["resolution"] == "Treasury"
+    after = tenant.client.get(f"/maps/{ctx['merged_map_id']}").json()
+    pay = next(n for n in after["model"]["nodes"] if n["id"] == "t_pay")
+    lanes = {lane["id"]: lane["name"] for lane in after["model"]["lanes"]}
+    assert lanes[pay["lane_id"]] == "Treasury"
+    assert owner["id"] not in {c["id"] for c in after["conflicts"]}
+    assert f"conflict_{owner['id']}" not in {q["id"] for q in after["model"]["open_questions"]}
+    validate_xsd(after["bpmn_xml"].encode())
+
+    assert tenant.client.post(f"/conflicts/{owner['id']}/resolve", json={"option": 0}).status_code == 409
+    cond = next(c for c in after["conflicts"] if c["kind"] == "condition")
+    assert tenant.client.post(f"/conflicts/{cond['id']}/resolve", json={"option": 9}).status_code == 422

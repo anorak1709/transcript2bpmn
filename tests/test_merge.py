@@ -125,3 +125,58 @@ def test_merge_eval_metrics() -> None:
     dup.nodes.append(dup.nodes[1].model_copy(update={"id": "t_enter_again", "name": "Enter the invoice into ERP"}))
     assert duplicate_task_rate(dup, gold, 0.8) == 1 / 7  # 7 tasks, one of them a duplicate
     assert conflict_recall(gold, [], [{"kind": "order", "node": "Pay supplier"}], 0.8) == 0
+
+
+def _apply(kind: str, node_ids: list[str], options: list[str], choice: int, model: ProcessModel) -> ProcessModel:
+    from app.pipeline.merge import resolution_ops
+
+    return apply_ops(model, resolution_ops(kind, node_ids, options, choice, model))
+
+
+def test_resolve_owner_condition_sequence() -> None:
+    from app.pipeline.merge import CannotApply, resolution_ops
+
+    m = gold_model("01_invoice_approval")
+
+    def lane(mm: ProcessModel, nid: str) -> str:
+        return next(n.lane_id for n in mm.nodes if n.id == nid)
+
+    assert lane(_apply("owner", ["t_pay"], ["Finance", "Accounts Payable"], 1, m), "t_pay") == "lane_ap"
+    treasury = _apply("owner", ["t_pay"], ["Finance", "Treasury"], 1, m)
+    assert lane(treasury, "t_pay") == "lane_treasury" and treasury.lanes[-1].name == "Treasury"
+
+    cond = _apply("condition", ["g_amount", "t_fin_approve"], ["Over $5,000", "Over $10,000"], 1, m)
+    assert next(f.condition for f in cond.flows if f.target_id == "t_fin_approve") == "Over $10,000"
+
+    branched = apply_ops(
+        m, edit_ops({"op": "connect", "source_id": "t_enter", "target_id": "t_pay", "condition": None})
+    )
+    seq = _apply("sequence", ["t_enter", "t_match", "t_pay"], ["Match invoice", "Pay supplier"], 0, branched)
+    assert [f.target_id for f in seq.flows if f.source_id == "t_enter"] == ["t_match"]
+
+    with pytest.raises(CannotApply):
+        resolution_ops("condition", ["g_amount", "t_fin_approve"], ["a", "b"], 5, m)
+    with pytest.raises(CannotApply, match="changed or removed"):
+        resolution_ops("owner", ["gone"], ["a", "b"], 1, m)
+
+
+def test_resolve_order_swaps_adjacent_steps_only() -> None:
+    from app.pipeline.merge import CannotApply, resolution_ops
+    from app.pipeline.validate import validate
+
+    m = gold_model("01_invoice_approval")  # start -> t_enter -> t_match -> g_match ...
+    swapped = _apply("order", ["t_match", "t_enter"], ["'Enter' first", "'Match' first"], 1, m)
+    edges = {(f.source_id, f.target_id) for f in swapped.flows}
+    assert {("start", "t_match"), ("t_match", "t_enter"), ("t_enter", "g_match")} <= edges
+    assert ("t_enter", "t_match") not in edges and validate(swapped) == []
+    assert _apply("order", ["t_match", "t_enter"], ["keep", "swap"], 0, m) == m  # keep = no change
+
+    onboarding = gold_model("02_employee_onboarding")  # laptop and orientation: a join in between
+    with pytest.raises(CannotApply, match="aren't directly next"):
+        resolution_ops("order", ["t_orient", "t_laptop"], ["keep", "swap"], 1, onboarding)
+
+
+def edit_ops(*raw: dict[str, Any]) -> list[Any]:
+    from app.pipeline.edit import EditPlan
+
+    return list(EditPlan.model_validate({"ops": list(raw), "reply": ""}).ops)

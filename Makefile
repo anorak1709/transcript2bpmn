@@ -28,4 +28,10 @@ fmt:
 eval:
 	uv run python -m eval.run_eval $(ARGS)
 
-.PHONY: run worker up down migrate test lint fmt eval
+.PHONY: run worker up down migrate test lint fmt eval backup restore
+
+backup:
+	scripts/backup.sh $(DIR)
+
+restore:
+	scripts/restore.sh $(DIR) $(DB) $(BUCKET)
