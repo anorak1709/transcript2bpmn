@@ -47,9 +47,41 @@ upload ─► ingest ─► normalize ─► extract (filter, extract) ─► va
 - **Convert** (`convert.py`): see *Layout* below. Output is validated against the official
   OMG BPMN 2.0 XSD (`app/pipeline/xsd/`) before it is stored.
 
+## Web app
+
+`web/`: React 19 + TypeScript, [shadcn/ui](https://ui.shadcn.com) (Radix primitives) +
+Tailwind 4, TanStack Query, React Router, bpmn-js. `make web-build` builds it into
+`app/static/app`, and FastAPI serves it at **`/app`**, same-origin, so the strict CSP holds
+(no inline script, nothing loaded from a CDN). The Docker image builds it in a Node stage.
+
+| Page | What it does |
+|---|---|
+| Sign in | paste an API key; it's checked before it's stored (this browser only) |
+| Projects | all projects, map status and open disagreements; create a project (optional retention) |
+| Project | drag-and-drop upload (text or audio; processing starts automatically), meetings table with **live job status** (polls while anything is running; failures show the error), disagreements with one button per option, export menu, delete (type the name to confirm) |
+| Map editor | bpmn-js Modeler; side panel tabs: **Step** (transcript quotes with speaker and time, "added by you", low-confidence badge), **Questions** (conflicts with option buttons; click to jump to the step), **Issues** (validation); chat edits; undo, version history, export, save; warns before leaving with unsaved changes |
+| Settings | API keys (create, shown once; revoke), monthly usage and rate limits, recent activity (audit log) |
+
+Light, dark and system themes; keyboard and screen-reader friendly (Radix primitives, real
+headings, labelled controls, skip link, live regions for status). The editor is code-split,
+so the bpmn-js bundle only loads when a map is opened.
+
+```bash
+make web-install      # once
+make run              # API on :8000
+make web-dev          # http://localhost:5173/app/ with hot reload (proxies the API)
+make web-build        # production build served by the API at /app
+make web-check        # typecheck + oxlint + prettier
+```
+
+`tests/test_web_e2e.py` drives the real app in Chromium against an in-process server:
+sign in, upload two meetings, watch the jobs finish, open the merged map, apply a conflict
+option, read a step's quotes, make a chat edit, create a key, and switch to dark mode. It fails
+on any console or CSP error.
+
 ## Organizations, keys, auth
 
-Every endpoint except `/health` and the editor's static page needs an API key:
+Every API endpoint except `/health` needs an API key (the web app's static files don't):
 `Authorization: Bearer t2b_…` (or `X-API-Key`). Keys belong to an organization and are
 issued by an operator (there's no signup or SSO yet):
 
@@ -94,7 +126,7 @@ Data created before tenancy was migrated into "Default organization"
 | `PUT /maps/{id}/bpmn` (body: BPMN XML) | save from the visual editor → parsed back into the model → new version |
 | `POST /maps/{id}/undo` | back one version (409 at v1) |
 | `GET /maps/{id}/versions` | history: version, source (extract/chat/visual), instruction |
-| `GET /editor/{map_id}` | bpmn-js editor (`/viewer/{id}` still works). `?select=<node_id>` deep-links a step |
+| `GET /app/…` | the web app (see *Web app*); `/editor/{id}`, `/viewer/{id}`, `/settings` redirect into it |
 
 ```bash
 H="Authorization: Bearer $T2B_KEY"
@@ -102,7 +134,7 @@ P=$(curl -sH "$H" -H 'Content-Type: application/json' -d '{"name":"Invoices"}' l
 T=$(curl -sH "$H" -F file=@eval/gold/01_invoice_approval/transcript.vtt localhost:8000/projects/$P/transcripts | jq -r .id)
 curl -sH "$H" -X POST localhost:8000/transcripts/$T/process
 curl -sH "$H" localhost:8000/projects/$P          # merged_map_id once the job is done
-open http://localhost:8000/editor/<merged_map_id>
+open http://localhost:8000/app/maps/<merged_map_id>   # or just use the web app at /app
 ```
 
 ## Multi-meeting merge
@@ -159,7 +191,7 @@ uv run python -m eval.merge_eval --pipeline eval.merge_eval:gold_extraction_pipe
 - `bpmn`: the XSD-valid BPMN 2.0 XML.
 - `svg` / `png`: rendered by the same bpmn-js the editor uses, in headless Chromium via
   Playwright, so exports match the editor exactly. bpmn-js is bundled
-  (`app/static/vendor/`), so the server makes no CDN calls. Needs
+  (`app/static/vendor/bpmn-viewer.production.min.js`), so the server makes no CDN calls. Needs
   `playwright install chromium` (it's in the Docker image), or set
   `EXPORT_BROWSER_CHANNEL=chrome` to use a local Chrome.
 - `md`: a written SOP (roles, numbered steps with owners, decisions with their conditions,
@@ -188,7 +220,7 @@ Config only. Set `LLM_PROVIDER=azure`, `LLM_API_BASE`, `LLM_API_VERSION`, `LLM_A
   request was HTTPS and sends HSTS. In production don't publish port 8000.
 - **Security headers:** every response gets `nosniff`, `no-referrer` and `X-Frame-Options:
   DENY`. HTML pages get a strict CSP: same-origin scripts only, no inline script. bpmn-js,
-  its CSS and fonts are vendored (`app/static/vendor/bpmn-js/`), so the browser loads nothing
+  its CSS and fonts are bundled into the web app build, so the browser loads nothing
   third-party.
 - **CORS:** off unless `CORS_ORIGINS='["https://app.example.com"]'` is set (the editor is
   same-origin; API clients aren't browsers).
@@ -197,7 +229,7 @@ Config only. Set `LLM_PROVIDER=azure`, `LLM_API_BASE`, `LLM_API_VERSION`, `LLM_A
   image export. Over the limit returns 429 with `Retry-After`.
 - **Quotas:** `python -m app.cli set-quota <org_id> 500` caps transcripts processed per
   calendar month (429 when reached); no number = unlimited. `GET /usage` shows usage and limits.
-- **API keys:** `/settings` page (and `GET/POST /keys`, `DELETE /keys/{id}`): list, create
+- **API keys:** the web app's Settings page (and `GET/POST /keys`, `DELETE /keys/{id}`): list, create
   (shown once) and revoke the organization's keys. You can't revoke the last active key.
   Every change is audited.
 - **Metrics (Prometheus):** API at `GET /metrics` with `Authorization: Bearer $METRICS_TOKEN`
@@ -247,10 +279,7 @@ change and always passes the XSD before it's stored.
   kept nodes is placed right after its predecessors, and everything downstream shifts right
   as a group (its arrangement kept) to make room. Hand-drawn edge routes are kept while both
   ends stay put, and recomputed once either moves.
-- **Editor** (`app/static/editor.html`): bpmn-js Modeler. The side panel shows the selected
-  step's transcript quotes (speaker, timestamp, segment id) or "added by you", open questions
-  and validation issues (click to jump to the step), and a speaker warning for undiarized
-  audio. The chat box saves unsaved visual changes before sending.
+- **Editor:** the web app's map page (see *Web app*).
 
 ## Audio
 
@@ -319,7 +348,7 @@ problems are left unresolved.
 The XSD check is automated (`tests/test_convert.py`, `tests/test_integration.py`). Camunda
 Modeler is a manual check per release:
 
-1. Process a transcript, open `/editor/<map_id>`, click **Download .bpmn**.
+1. Process a transcript, open its map in the web app, choose **Export → BPMN 2.0**.
 2. Open it in [Camunda Modeler](https://camunda.com/download/modeler/) (File → Open).
 3. Pass if it opens with no import warnings, lanes contain their tasks, and gateway
    condition labels show.
@@ -359,7 +388,8 @@ app/core/       settings (pydantic-settings), logging
 app/llm/        LLMProvider interface + LiteLLM implementation
 app/models/     ProcessModel schema
 app/pipeline/   ingest, transcribe/, normalize, extract, validate, convert, edit, parse_bpmn, merge, export, run
-app/static/     editor.html (bpmn-js Modeler)
+web/            React web app (Vite, shadcn/ui, Tailwind), built into app/static/app
+app/static/     built web app (gitignored) + vendored bpmn-js viewer for server-side exports
 app/maps.py     map versions: create / commit / undo
 app/projects.py merge into project, delete project, retention
 app/auth.py     API keys -> org-scoped DB session

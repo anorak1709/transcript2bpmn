@@ -25,6 +25,9 @@ jobs:
       # Service containers can't take a command; MinIO needs `server /data`.
       - run: docker run -d -p 9000:9000 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin cgr.dev/chainguard/minio server /data
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - uses: actions/setup-node@v4
+        with: {node-version: "24.20.0", cache: npm, cache-dependency-path: web/package-lock.json}
+      - run: make web-install web-check web-build  # the browser e2e test serves this build
       - run: uv sync && uv run playwright install --with-deps chromium
       - run: make lint
       - run: uv run alembic upgrade head
@@ -63,3 +66,9 @@ jobs:
         run: echo "ok=${{ env.LLM_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
       - if: steps.creds.outputs.ok == 'true'
         run: uv run python -m eval.smoke --audio eval/asr/samples/invoice_approval.m4a
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t transcript2bpmn:ci .  # web stage + API image build cleanly

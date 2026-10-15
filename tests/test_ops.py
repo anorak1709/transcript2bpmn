@@ -44,18 +44,22 @@ def test_security_headers_and_csp() -> None:
     assert client.get("/health", headers={"x-forwarded-proto": "https"}).status_code == 200
 
 
-def test_editor_has_no_third_party_or_inline_code() -> None:
-    for page in ("editor.html", "settings.html"):
-        html = (STATIC / page).read_text()
-        assert "unpkg" not in html and "<script>" not in html and "style=" not in html, page
+def test_web_app_has_no_third_party_or_inline_code() -> None:
+    import re
+
+    from app.main import WEB
+
+    if not (WEB / "index.html").exists():
+        pytest.skip("frontend not built (make web-build)")
+    html = (WEB / "index.html").read_text()
+    assert re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html) is None  # every script is an external file
+    assert "unpkg" not in html and "cdn" not in html.lower()
     client = TestClient(app)
-    for asset in (
-        "vendor/bpmn-js/bpmn-modeler.production.min.js",
-        "vendor/bpmn-js/assets/bpmn-font/font/bpmn.woff2",
-        "editor.js",
-        "settings.js",
-    ):
-        assert client.get(f"/static/{asset}").status_code == 200, asset
+    for src in re.findall(r'(?:src|href)="(/app/assets/[^"]+)"', html):
+        assert client.get(src).status_code == 200, src
+    bundles = " ".join(p.read_text(errors="ignore") for p in (WEB / "assets").glob("*.js"))
+    assert "unpkg.com" not in bundles  # bpmn-js is bundled, nothing fetched from a CDN
+    assert (STATIC / "vendor" / "bpmn-viewer.production.min.js").exists()  # server-side export renderer
 
 
 def test_cors_is_off_by_default_and_configurable() -> None:

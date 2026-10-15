@@ -35,6 +35,14 @@ class ProjectIn(BaseModel):
     retention_days: int | None = Field(default=None, ge=1)
 
 
+class JobOut(BaseModel):
+    id: str
+    transcript_id: str
+    status: str
+    error: str | None
+    map_id: str | None  # this transcript's own map; the merged one is on the project
+
+
 class TranscriptOut(BaseModel):
     id: str
     project_id: str
@@ -42,6 +50,8 @@ class TranscriptOut(BaseModel):
     segment_count: int | None  # text uploads
     duration_seconds: float | None  # audio uploads
     content_expired: bool = False
+    created_at: datetime | None = None
+    latest_job: JobOut | None = None  # most recent processing run, for live status in the UI
 
 
 class ProjectOut(BaseModel):
@@ -51,14 +61,6 @@ class ProjectOut(BaseModel):
     merged_map_id: str | None
     open_conflicts: int
     transcripts: list[TranscriptOut]
-
-
-class JobOut(BaseModel):
-    id: str
-    transcript_id: str
-    status: str
-    error: str | None
-    map_id: str | None  # this transcript's own map; the merged one is on the project
 
 
 class ConflictOut(BaseModel):
@@ -88,7 +90,7 @@ def _project(db: Session, project_id: str) -> Project:
     return p
 
 
-def _transcript_out(t: Transcript, duration: float | None = None) -> TranscriptOut:
+def _transcript_out(t: Transcript, duration: float | None = None, job: Job | None = None) -> TranscriptOut:
     return TranscriptOut(
         id=t.id,
         project_id=t.project_id,
@@ -96,6 +98,8 @@ def _transcript_out(t: Transcript, duration: float | None = None) -> TranscriptO
         segment_count=len(t.segments) if t.segments else None,
         duration_seconds=duration,
         content_expired=t.content_expired_at is not None,
+        created_at=t.created_at,
+        latest_job=_job_out(job) if job else None,
     )
 
 
@@ -117,7 +121,14 @@ def list_projects(db: DB) -> list[ProjectOut]:
 @router.get("/projects/{project_id}")
 def get_project(project_id: str, db: DB) -> ProjectOut:
     p = _project(db, project_id)
-    transcripts = db.scalars(select(Transcript).where(Transcript.project_id == p.id).order_by(Transcript.created_at))
+    transcripts = db.scalars(
+        select(Transcript).where(Transcript.project_id == p.id).order_by(Transcript.created_at)
+    ).all()
+    latest: dict[str, Job] = {}
+    for job in db.scalars(
+        select(Job).where(Job.transcript_id.in_([t.id for t in transcripts])).order_by(Job.created_at)
+    ):
+        latest[job.transcript_id] = job  # ordered by time: the last one wins
     open_conflicts = db.scalars(select(Conflict.id).where(Conflict.project_id == p.id, Conflict.status == "open")).all()
     return ProjectOut(
         id=p.id,
@@ -125,7 +136,7 @@ def get_project(project_id: str, db: DB) -> ProjectOut:
         retention_days=p.retention_days,
         merged_map_id=p.merged_map_id,
         open_conflicts=len(open_conflicts),
-        transcripts=[_transcript_out(t) for t in transcripts],
+        transcripts=[_transcript_out(t, job=latest.get(t.id)) for t in transcripts],
     )
 
 

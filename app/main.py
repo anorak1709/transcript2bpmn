@@ -6,8 +6,7 @@ from arq import create_pool
 from arq.connections import RedisSettings
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 
 from app.api import health, keys, maps, projects
 from app.core.config import get_settings
@@ -41,7 +40,6 @@ app.include_router(projects.router)
 app.include_router(maps.router)
 app.include_router(keys.router)
 app.include_router(metrics_router)
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
 app.middleware("http")(metrics_middleware)
 
 
@@ -70,13 +68,35 @@ if origins := get_settings().cors_origins:
     )
 
 
+# --- Web app (web/, built by `make web-build` into app/static/app) ---------------------------
+WEB = STATIC / "app"
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    return RedirectResponse("/app/")
+
+
 @app.get("/editor/{map_id}", include_in_schema=False)
-@app.get("/viewer/{map_id}", include_in_schema=False)  # Phase 1 links keep working
-def editor(map_id: str) -> FileResponse:
-    return FileResponse(STATIC / "editor.html")
+@app.get("/viewer/{map_id}", include_in_schema=False)  # older links keep working
+def legacy_editor(map_id: str) -> RedirectResponse:
+    return RedirectResponse(f"/app/maps/{map_id}", status_code=301)
 
 
 @app.get("/settings", include_in_schema=False)
-def settings_page() -> FileResponse:
-    """API key management page (lists, creates, revokes keys for the caller's org)."""
-    return FileResponse(STATIC / "settings.html")
+def legacy_settings() -> RedirectResponse:
+    return RedirectResponse("/app/settings", status_code=301)
+
+
+@app.get("/app", include_in_schema=False)
+@app.get("/app/{path:path}", include_in_schema=False)
+def web_app(path: str = "") -> Response:
+    """Static build output; any other path is a client-side route, so it gets index.html."""
+    if not (WEB / "index.html").exists():
+        return PlainTextResponse("Web app not built. Run `make web-build`.", status_code=503)
+    target = (WEB / path).resolve()
+    if path and target.is_file() and target.is_relative_to(WEB.resolve()):
+        # Hashed file names under assets/ never change content: cache them for a year.
+        cache = "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
+        return FileResponse(target, headers={"Cache-Control": cache})
+    return FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})

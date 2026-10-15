@@ -3,3 +3,7 @@
 .git
 **/__pycache__
 eval/reports
+web/node_modules
+app/static/app
+.build
+backups
