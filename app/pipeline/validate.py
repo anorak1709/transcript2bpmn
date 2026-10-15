@@ -10,8 +10,9 @@ from pydantic import BaseModel
 from app.llm.provider import LLMProvider
 from app.models.process import GATEWAY_TYPES, OpenQuestion, ProcessModel
 from app.models.transcript import Segment
-from app.pipeline.extract import enforce_citations, load_prompt
+from app.pipeline.extract import enforce_citations
 from app.pipeline.normalize import render
+from app.pipeline.prompts import load_prompt
 
 log = logging.getLogger(__name__)
 

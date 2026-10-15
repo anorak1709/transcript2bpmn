@@ -1,25 +1,22 @@
 """Two-pass extraction: relevance filter, then structured ProcessModel extraction."""
 
 import logging
-from pathlib import Path
 
 from pydantic import BaseModel
 
+from app.core.config import get_settings
 from app.llm.provider import LLMProvider
 from app.models.process import Node, OpenQuestion, ProcessModel
 from app.models.transcript import Segment
+from app.pipeline.merge import merge
 from app.pipeline.normalize import render
+from app.pipeline.prompts import load_prompt
 
 log = logging.getLogger(__name__)
 
-PROMPTS = Path(__file__).parent / "prompts"
 FILTER_PROMPT = "filter_v1"
 EXTRACT_PROMPT = "extract_v1"
 BATCH_CHARS = 12_000  # ~3k tokens of transcript per filter call
-
-
-def load_prompt(name: str) -> str:
-    return (PROMPTS / f"{name}.md").read_text()
 
 
 class RelevanceLabel(BaseModel):
@@ -54,11 +51,42 @@ def filter_relevant(llm: LLMProvider, segments: list[Segment]) -> list[Segment]:
     return [s for s in segments if s.segment_id not in irrelevant]
 
 
+WINDOW_OVERLAP = 3  # segments repeated at each window edge, so a step spanning the cut is seen whole
+
+
 def extract_model(llm: LLMProvider, segments: list[Segment]) -> ProcessModel:
-    # ponytail: one extraction call over all relevant segments. Long meetings that overflow
-    # the context window need chunked extraction + merge (the Phase 4 merge step covers that).
+    """One extraction call if the transcript fits EXTRACT_MAX_CHARS; otherwise extract
+    overlapping windows and fold them together with the multi-meeting merge, which matches
+    the same step seen in two windows instead of duplicating it."""
+    windows = extraction_windows(segments, get_settings().extract_max_chars)
+    model = _extract_one(llm, windows[0])
+    for k, window in enumerate(windows[1:], 2):
+        model = merge(llm, model, _extract_one(llm, window), f"part {k} of this meeting").model
+    if len(windows) > 1:
+        log.info("extracted %d windows of %d segments", len(windows), len(segments))
+    return model
+
+
+def _extract_one(llm: LLMProvider, segments: list[Segment]) -> ProcessModel:
     model = llm.structured(load_prompt(EXTRACT_PROMPT), render(segments), ProcessModel, "extract")
     return enforce_citations(model, {s.segment_id for s in segments})
+
+
+def extraction_windows(segments: list[Segment], max_chars: int) -> list[list[Segment]]:
+    """Consecutive windows of at most ~max_chars of text, each starting with the last
+    WINDOW_OVERLAP segments of the previous one."""
+    windows: list[list[Segment]] = []
+    start = 0
+    while start < len(segments):
+        size, end = 0, start
+        while end < len(segments) and (end == start or size + len(segments[end].text) <= max_chars):
+            size += len(segments[end].text)
+            end += 1
+        windows.append(segments[start:end])
+        if end >= len(segments):
+            break
+        start = max(end - WINDOW_OVERLAP, start + 1)
+    return windows or [[]]
 
 
 def enforce_citations(model: ProcessModel, valid_ids: set[str]) -> ProcessModel:

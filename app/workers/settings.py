@@ -12,4 +12,5 @@ class WorkerSettings:
     functions = [process_transcript]
     cron_jobs = [cron(retention, hour=3, minute=0, run_at_startup=False)]  # daily retention purge
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
+    queue_name = get_settings().job_queue
     job_timeout = 1800  # long transcripts + LLM latency

@@ -8,7 +8,7 @@ y = lane band, with sub-rows when several nodes of one lane share a column.
 
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -139,17 +139,34 @@ def _columns(nodes: list[Node], flows: list[Flow]) -> tuple[dict[str, int], set[
     return col, back
 
 
-# node id -> (lane id, x, y offset from the lane's top). Lane-relative y survives lanes
-# being added, removed or resized above it.
-KeptPositions = dict[str, tuple[str, float, float]]
+@dataclass
+class KeptPositions:
+    """What the current diagram looks like, so regeneration can keep it.
+
+    nodes: node id -> (lane id, x, y offset from the lane's top, absolute y). Lane-relative y
+           survives lanes being added, removed or resized above it.
+    edges: flow id -> waypoints, reused when both ends are exactly where they were.
+    """
+
+    nodes: dict[str, tuple[str, float, float, float]] = field(default_factory=dict)
+    edges: dict[str, list[tuple[float, float]]] = field(default_factory=dict)
+
+
+GAP_X = COL_W - TASK_SIZE[0]  # horizontal space between consecutive steps
 
 
 def layout(model: ProcessModel, keep: KeptPositions | None = None) -> Layout:
     """Lay out the model. Nodes in `keep` that are still in the same lane stay where they
-    were (e.g. where the user dragged them); everything else gets the computed position."""
+    were (e.g. where the user dragged them); everything else gets the computed position.
+
+    A node inserted between kept ones goes just right of its predecessors, and the kept
+    nodes downstream of it shift right together (their arrangement intact) to make room.
+    """
     lanes, nodes, flows = _clean(model)
-    col, _ = _columns(nodes, flows)
-    keep = {nid: k for nid, k in (keep or {}).items() if any(n.id == nid and n.lane_id == k[0] for n in nodes)}
+    col, back = _columns(nodes, flows)
+    keep = keep or KeptPositions()
+    lane_of = {n.id: n.lane_id for n in nodes}
+    kept = {nid: k for nid, k in keep.nodes.items() if lane_of.get(nid) == k[0]}
 
     cells: dict[tuple[str, int], list[Node]] = defaultdict(list)
     for n in nodes:
@@ -160,9 +177,9 @@ def layout(model: ProcessModel, keep: KeptPositions | None = None) -> Layout:
 
     min_x = ORIGIN_X + POOL_LABEL_W + 10
     for n in nodes:  # lanes grow to fit kept nodes
-        if n.id in keep:
+        if n.id in kept:
             h = SIZE.get(n.type, TASK_SIZE)[1]
-            rows[n.lane_id] = max(rows[n.lane_id], (keep[n.id][2] + h + 20) / ROW_H)
+            rows[n.lane_id] = max(rows[n.lane_id], (kept[n.id][2] + h + 20) / ROW_H)
 
     lane_tops: dict[str, float] = {}
     y = float(ORIGIN_Y)
@@ -172,23 +189,43 @@ def layout(model: ProcessModel, keep: KeptPositions | None = None) -> Layout:
 
     boxes: dict[str, Box] = {}
     for n in nodes:
-        if n.id in keep:
+        if n.id in kept:
             w, h = SIZE.get(n.type, TASK_SIZE)
-            _, x, dy = keep[n.id]
+            _, x, dy, _ = kept[n.id]
             boxes[n.id] = Box(max(x, min_x), lane_tops[n.lane_id] + max(dy, 0), w, h)
-    for (lid, c), members in cells.items():
-        for row, n in enumerate(members):
-            if n.id in keep:
-                continue
-            w, h = SIZE.get(n.type, TASK_SIZE)
-            cx = ORIGIN_X + POOL_LABEL_W + PAD_X + c * COL_W + COL_W / 2
-            cy = lane_tops[lid] + row * ROW_H + ROW_H / 2
-            box = Box(cx - w / 2, cy - h / 2, w, h)
-            # ponytail: new nodes just slide right past kept ones they'd overlap; a real
-            # incremental layout would reflow neighbours.
-            while any(_overlaps(box, boxes[o.id]) for o in nodes if o.id in boxes and o.lane_id == lid):
-                box.x += COL_W
-            boxes[n.id] = box
+
+    forward = [f for f in flows if f.id not in back]
+    preds: dict[str, list[str]] = defaultdict(list)
+    succs: dict[str, list[str]] = defaultdict(list)
+    for f in forward:
+        preds[f.target_id].append(f.source_id)
+        succs[f.source_id].append(f.target_id)
+
+    def shift_downstream(start: str, delta: float) -> None:
+        seen, stack = {start}, [start]
+        while stack:
+            nid = stack.pop()
+            boxes[nid].x += delta
+            for nxt in succs[nid]:
+                if nxt in boxes and nxt not in seen:
+                    seen.add(nxt)
+                    stack.append(nxt)
+
+    row_in_cell = {n.id: r for members in cells.values() for r, n in enumerate(members)}
+    for n in sorted((n for n in nodes if n.id not in kept), key=lambda n: col[n.id]):
+        w, h = SIZE.get(n.type, TASK_SIZE)
+        cx = ORIGIN_X + POOL_LABEL_W + PAD_X + col[n.id] * COL_W + COL_W / 2
+        cy = lane_tops[n.lane_id] + row_in_cell[n.id] * ROW_H + ROW_H / 2
+        box = Box(cx - w / 2, cy - h / 2, w, h)
+        placed = [boxes[p] for p in preds[n.id] if p in boxes]
+        if kept and placed:  # follow the (possibly user-placed) predecessors, not the column grid
+            box.x = max(b.x + b.w for b in placed) + GAP_X
+        while any(_overlaps(box, boxes[o.id]) for o in nodes if o.id in boxes and o.lane_id == n.lane_id):
+            box.x += COL_W
+        boxes[n.id] = box
+        for s in succs[n.id]:  # make room: push what comes after it to the right
+            if s in kept and boxes[s].x < box.x + box.w + GAP_X:
+                shift_downstream(s, box.x + box.w + GAP_X - boxes[s].x)
 
     right = max((b.x + b.w for b in boxes.values()), default=0)
     pool_w = max(POOL_LABEL_W + 2 * PAD_X + (max(col.values(), default=0) + 1) * COL_W, right + PAD_X - ORIGIN_X)
@@ -196,7 +233,17 @@ def layout(model: ProcessModel, keep: KeptPositions | None = None) -> Layout:
         lid: Box(ORIGIN_X + POOL_LABEL_W, lane_tops[lid], pool_w - POOL_LABEL_W, rows[lid] * ROW_H) for lid, _ in lanes
     }
     pool = Box(ORIGIN_X, ORIGIN_Y, pool_w, y - ORIGIN_Y)
-    edges = {f.id: _route(boxes[f.source_id], boxes[f.target_id]) for f in flows}
+
+    def unmoved(nid: str) -> bool:
+        k = kept.get(nid)
+        return k is not None and abs(boxes[nid].x - k[1]) < 0.5 and abs(boxes[nid].y - k[3]) < 0.5
+
+    edges = {
+        f.id: keep.edges[f.id]
+        if f.id in keep.edges and unmoved(f.source_id) and unmoved(f.target_id)
+        else _route(boxes[f.source_id], boxes[f.target_id])
+        for f in flows
+    }
     return Layout(pool, lane_boxes, boxes, edges)
 
 

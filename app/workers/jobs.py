@@ -9,8 +9,8 @@ from app.db.models import Job, Project, Transcript
 from app.db.tenancy import bind, system_session
 from app.llm.provider import LiteLLMProvider, LLMProvider
 from app.maps import create_map
-from app.pipeline import ingest, normalize
-from app.pipeline.run import model_from_segments
+from app.pipeline import ingest
+from app.pipeline.run import model_from_segments, prepare_segments
 from app.pipeline.transcribe import AUDIO_EXTENSIONS, Transcriber, get_transcriber
 from app.projects import merge_into_project, purge_expired
 
@@ -45,7 +45,7 @@ def run_job(job_id: str, llm: LLMProvider | None = None, transcriber: Transcribe
             else:
                 stage("normalizing")
                 raw = ingest.parse(transcript.filename, storage.get(transcript.storage_key))
-            segments = normalize.normalize(raw)
+            segments = prepare_segments(raw, llm)
             transcript.segments = [s.model_dump() for s in segments]
 
             stage("extracting")

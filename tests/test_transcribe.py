@@ -75,10 +75,42 @@ def test_split_measures_real_offsets(tone: Path, tmp_path: Path) -> None:
     out.mkdir()
     chunks = audio.split(tone, out, chunk_seconds=10)
     assert len(chunks) == 3
-    offsets = [o for _, o, _ in chunks]
-    assert offsets[0] == 0 and abs(offsets[1] - 10) < 0.2 and abs(offsets[2] - 20) < 0.2
-    assert abs(sum(d for _, _, d in chunks) - 25) < 0.2
+    assert [c.offset for c in chunks] == [0, 10, 20]
+    assert [(c.own_start, c.own_end) for c in chunks] == [(0, 10), (10, 20), (20, None)]
+    assert abs(sum(c.duration for c in chunks) - 25) < 0.2
     assert abs(audio.duration(tone) - 25) < 0.1
+
+
+@needs_ffmpeg
+def test_split_with_overlap_pads_both_sides(tone: Path, tmp_path: Path) -> None:
+    chunks = audio.split(tone, tmp_path, chunk_seconds=10, overlap=2)
+    assert [c.offset for c in chunks] == [0, 8, 18]
+    assert [round(c.duration) for c in chunks] == [12, 14, 7]  # 0-12, 8-22, 18-25
+    assert [(c.own_start, c.own_end) for c in chunks] == [(0, 10), (10, 20), (20, None)]
+
+
+def test_stitch_drops_speech_owned_by_the_neighbouring_chunk() -> None:
+    # A sentence straddling the 10 s cut is heard whole by both chunks; only one copy survives.
+    first = Chunk(
+        offset=0,
+        duration=13,
+        own_start=0,
+        own_end=10,
+        segments=[_seg(0, 4, "Start."), _seg(8.5, 11.5, "We approve it."), _seg(11.5, 13, "Then")],
+    )
+    second = Chunk(
+        offset=7,
+        duration=10,
+        own_start=10,
+        own_end=None,
+        segments=[_seg(1.5, 4.5, "We approve it."), _seg(4.5, 6, "Then we"), _seg(6, 8, "pay it.")],
+    )
+    assert [(s.text, s.start_ts) for s in stitch([first, second])] == [
+        ("Start.", 0),
+        ("We approve it.", 8.5),  # owned by the first chunk (starts before 10 s)
+        ("Then we", 11.5),  # second chunk's copy wins after the cut
+        ("pay it.", 13),
+    ]
 
 
 def test_duration_rejects_non_audio(tmp_path: Path) -> None:
@@ -106,6 +138,7 @@ class FakeClient:
 
 
 def _settings(model: str, **kw: Any) -> Settings:
+    kw.setdefault("transcribe_chunk_overlap_seconds", 0)
     return Settings(_env_file=None, transcribe_model=model, transcribe_chunk_seconds=10, **kw)
 
 

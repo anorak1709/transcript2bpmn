@@ -18,11 +18,11 @@ from typing import Any
 from app.core.config import get_settings
 from app.llm.provider import LiteLLMProvider
 from app.models.process import ProcessModel
-from app.pipeline import ingest, normalize
+from app.pipeline import ingest
 from app.pipeline.convert import to_bpmn, validate_xsd
 from app.pipeline.export import sop_markdown
 from app.pipeline.merge import merge, qualify
-from app.pipeline.run import model_from_segments
+from app.pipeline.run import model_from_segments, prepare_segments
 from app.pipeline.transcribe import get_transcriber
 from app.pipeline.validate import validate
 
@@ -52,7 +52,7 @@ def main() -> int:
         segs_by_t: dict[str, dict[str, Any]] = {}
         for k, path in enumerate(sorted(CASE.glob("transcript_*.*")), 1):
             t0 = time.time()
-            segments = normalize.normalize(ingest.parse(path.name, path.read_bytes()))
+            segments = prepare_segments(ingest.parse(path.name, path.read_bytes()), llm)
             result = model_from_segments(segments, llm)
             tasks = [n.name for n in result.model.nodes if n.type.endswith("task")]
             check(

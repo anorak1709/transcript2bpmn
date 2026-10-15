@@ -21,31 +21,59 @@ def _ratio(num: int, den: int) -> float:
     return num / den if den else 1.0  # nothing expected and nothing produced counts as perfect
 
 
-def match_nodes(pred: ProcessModel, gold: ProcessModel, threshold: float) -> dict[str, str]:
-    """Return {pred_node_id: gold_node_id}.
+def assign(weights: list[list[float]]) -> dict[int, int]:
+    """Maximum-weight one-to-one assignment (Hungarian algorithm, O(n^3)). Returns
+    {row: col} for pairs with positive weight; zero means "not allowed to pair"."""
+    if not weights or not weights[0]:
+        return {}
+    flip = len(weights) > len(weights[0])
+    w = [list(r) for r in zip(*weights, strict=True)] if flip else weights
+    n, m = len(w), len(w[0])
+    inf = float("inf")
+    u, v, p, way = [0.0] * (n + 1), [0.0] * (m + 1), [0] * (m + 1), [0] * (m + 1)
+    for i in range(1, n + 1):
+        p[0], j0 = i, 0
+        minv, used = [inf] * (m + 1), [False] * (m + 1)
+        while True:
+            used[j0] = True
+            i0, delta, j1 = p[j0], inf, 0
+            for j in range(1, m + 1):
+                if not used[j]:
+                    cur = -w[i0 - 1][j - 1] - u[i0] - v[j]  # minimize negative weight
+                    if cur < minv[j]:
+                        minv[j], way[j] = cur, j0
+                    if minv[j] < delta:
+                        delta, j1 = minv[j], j
+            for j in range(m + 1):
+                if used[j]:
+                    u[p[j]] += delta
+                    v[j] -= delta
+                else:
+                    minv[j] -= delta
+            j0 = j1
+            if p[j0] == 0:
+                break
+        while j0:
+            j1 = way[j0]
+            p[j0], j0 = p[j1], j1
+    pairs = {p[j] - 1: j - 1 for j in range(1, m + 1) if p[j] and w[p[j] - 1][j - 1] > 0}
+    return {c: r for r, c in pairs.items()} if flip else pairs
 
-    Events match on type alone (their names vary wildly and carry little signal);
-    tasks and gateways must also clear the name-similarity threshold.
-    """
-    # ponytail: greedy, not Hungarian. Fine for tens of nodes; swap in scipy's
-    # linear_sum_assignment if near-tie mismatches show up in reports.
-    candidates: list[tuple[float, str, str]] = []
-    for p in pred.nodes:
-        for g in gold.nodes:
-            if _kind(p) != _kind(g):
-                continue
-            score = similarity(p.name, g.name)
-            is_event = p.type in ("start_event", "end_event")
-            if is_event or score >= threshold:
-                candidates.append((score, p.id, g.id))
-    candidates.sort(reverse=True)
-    mapping: dict[str, str] = {}
-    used: set[str] = set()
-    for _, pid, gid in candidates:
-        if pid not in mapping and gid not in used:
-            mapping[pid] = gid
-            used.add(gid)
-    return mapping
+
+def match_nodes(pred: ProcessModel, gold: ProcessModel, threshold: float) -> dict[str, str]:
+    """Return {pred_node_id: gold_node_id}: the one-to-one matching with the highest total
+    name similarity among allowed pairs (same kind; tasks and gateways must also clear the
+    threshold; events match on type alone since their names vary wildly)."""
+
+    def weight(p: Node, g: Node) -> float:
+        if _kind(p) != _kind(g):
+            return 0.0
+        sim = similarity(p.name, g.name)
+        allowed = p.type in ("start_event", "end_event") or sim >= threshold
+        return 1.0 + sim if allowed else 0.0  # +1: any allowed match beats leaving both unmatched
+
+    pairs = assign([[weight(p, g) for g in gold.nodes] for p in pred.nodes])
+    return {pred.nodes[r].id: gold.nodes[c].id for r, c in pairs.items()}
 
 
 def score(pred: ProcessModel, gold: ProcessModel, threshold: float = 0.8) -> dict[str, float]:

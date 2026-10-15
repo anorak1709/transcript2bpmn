@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.llm.provider import LLMProvider
 from app.models.process import TASK_TYPES, Flow, Lane, Node, OpenQuestion, ProcessModel
-from app.pipeline.extract import load_prompt
+from app.pipeline.prompts import load_prompt
 
 EDIT_PROMPT = "edit_v1"
 

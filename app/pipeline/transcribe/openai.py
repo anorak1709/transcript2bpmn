@@ -32,6 +32,7 @@ class OpenAITranscriber(Transcriber):
             raise ValueError("TRANSCRIBE_MODEL is not set")
         self.model = s.transcribe_model
         self.chunk_seconds = s.transcribe_chunk_seconds
+        self.overlap = s.transcribe_chunk_overlap_seconds
         self.diarize = "diarize" in self.model
         key = s.transcribe_api_key or s.llm_api_key
         if client is not None:
@@ -50,13 +51,13 @@ class OpenAITranscriber(Transcriber):
         names: list[str] = []
         refs: list[str] = []
         with tempfile.TemporaryDirectory() as tmp:
-            for i, (path, offset, length) in enumerate(audio.split(audio_path, Path(tmp), self.chunk_seconds)):
-                segments = self._transcribe_chunk(path, length, i, names, refs)
+            for i, c in enumerate(audio.split(audio_path, Path(tmp), self.chunk_seconds, self.overlap)):
+                segments = self._transcribe_chunk(c.path, c.duration, i, names, refs)
                 if self.diarize and i == 0:
                     # Labels restart at "A" on every request; anchoring later chunks to voice
                     # samples from the first keeps "Speaker A" the same person all meeting.
-                    names, refs = _speaker_references(path, segments)
-                chunks.append(Chunk(offset=offset, duration=length, segments=segments))
+                    names, refs = _speaker_references(c.path, segments)
+                chunks.append(Chunk(c.offset, c.duration, segments, c.own_start, c.own_end))
         return Transcription(segments=stitch(chunks), diarization_available=self.diarize)
 
     def _transcribe_chunk(

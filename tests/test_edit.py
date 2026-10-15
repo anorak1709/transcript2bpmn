@@ -4,7 +4,7 @@ import pytest
 from lxml import etree
 
 from app.models.process import ProcessModel
-from app.pipeline.convert import layout, to_bpmn, validate_xsd
+from app.pipeline.convert import DI, layout, to_bpmn, validate_xsd
 from app.pipeline.edit import EditPlan, OpError, PatchOp, apply_ops, plan_edit
 from app.pipeline.parse_bpmn import NS, read_bpmn
 from app.pipeline.validate import validate
@@ -164,14 +164,18 @@ def test_plan_edit_retries_once_with_the_error(invoice: ProcessModel) -> None:
         plan_edit(ScriptedLLM(bad, bad), invoice, "x")
 
 
-def test_kept_positions_survive_an_edit(invoice: ProcessModel) -> None:
-    # Simulate the user dragging t_pay somewhere else in the editor.
-    root = etree.fromstring(to_bpmn(invoice))
-    bounds = root.find(".//bpmndi:BPMNShape[@bpmnElement='Node_t_pay']/dc:Bounds", NS)
+def _drag(model: ProcessModel, node_xml_id: str, x: float) -> bytes:
+    """Simulate the user dragging a node in the editor."""
+    root = etree.fromstring(to_bpmn(model))
+    bounds = root.find(f".//bpmndi:BPMNShape[@bpmnElement='{node_xml_id}']/dc:Bounds", NS)
     assert bounds is not None
-    bounds.set("x", "1500")
-    _, keep = read_bpmn(etree.tostring(root), invoice)
+    bounds.set("x", str(x))
+    return etree.tostring(root)
 
+
+def test_insertion_reflows_downstream_and_keeps_upstream(invoice: ProcessModel) -> None:
+    _, keep = read_bpmn(_drag(invoice, "Node_t_pay", 1500), invoice)
+    before = layout(invoice, keep)
     edited = apply_ops(
         invoice,
         ops(
@@ -186,12 +190,50 @@ def test_kept_positions_survive_an_edit(invoice: ProcessModel) -> None:
         ),
     )
     geo = layout(edited, keep)
-    assert geo.nodes["t_pay"].x == 1500  # user's placement kept
-    before = layout(invoice)
-    assert (geo.nodes["start"].x, geo.nodes["start"].y) == (before.nodes["start"].x, before.nodes["start"].y)
-    scan = geo.nodes["t_scan"]
+
+    for upstream in ("start", "t_enter"):  # before the insertion: untouched
+        assert (geo.nodes[upstream].x, geo.nodes[upstream].y) == (before.nodes[upstream].x, before.nodes[upstream].y)
+    enter, scan, match = geo.nodes["t_enter"], geo.nodes["t_scan"], geo.nodes["t_match"]
+    assert enter.x + enter.w < scan.x < scan.x + scan.w < match.x  # inserted in order, left to right
+    delta = geo.nodes["t_match"].x - before.nodes["t_match"].x
+    assert delta > 0
+    for downstream in ("t_match", "g_match", "t_pay", "end_paid"):  # shifted together: arrangement kept
+        assert geo.nodes[downstream].x - before.nodes[downstream].x == delta
+    assert geo.nodes["t_pay"].x == 1500 + delta  # the user's drag survives, just shifted with its neighbours
     others = [b for nid, b in geo.nodes.items() if nid != "t_scan"]
     assert not any(
         scan.x < b.x + b.w and b.x < scan.x + scan.w and scan.y < b.y + b.h and b.y < scan.y + scan.h for b in others
     )
     validate_xsd(to_bpmn(edited, keep))
+
+
+def test_unrelated_edit_keeps_every_position_and_hand_drawn_route(invoice: ProcessModel) -> None:
+    root = etree.fromstring(_drag(invoice, "Node_t_pay", 1500))
+    edge = root.find(".//bpmndi:BPMNEdge[@bpmnElement='Flow_f12']", NS)
+    assert edge is not None
+    for w in list(edge):
+        edge.remove(w)
+    custom = [(1600, 380), (1600, 460), (1700, 460), (1700, 400)]  # a detour the user drew
+    for x, y in custom:
+        etree.SubElement(edge, f"{{{DI}}}waypoint", x=str(x), y=str(y))
+    _, keep = read_bpmn(etree.tostring(root), invoice)
+
+    renamed = apply_ops(invoice, ops({"op": "rename_node", "node_id": "t_match", "name": "Three-way match"}))
+    before, after = layout(invoice, keep), layout(renamed, keep)
+    assert {k: (b.x, b.y) for k, b in after.nodes.items()} == {k: (b.x, b.y) for k, b in before.nodes.items()}
+    assert after.edges["f12"] == custom
+    # ...but once an endpoint moves, the stale route is recomputed instead of kept.
+    moved = apply_ops(
+        invoice,
+        ops(
+            {
+                "op": "add_task",
+                "id": "t_x",
+                "name": "X",
+                "type": "service_task",
+                "lane_id": "lane_fin",
+                "insert_after": "g_join",
+            }
+        ),
+    )
+    assert layout(moved, keep).edges["f12"] != custom

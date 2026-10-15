@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://app:app@localhost:5433/app"
     redis_url: str = "redis://localhost:6379/0"
+    job_queue: str = "arq:queue"  # API enqueues here, worker consumes here
 
     s3_endpoint_url: str = "http://localhost:9000"
     s3_access_key: str = "minioadmin"
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     transcribe_api_base: str | None = None  # Azure: falls back to LLM_API_BASE
     transcribe_api_version: str | None = None  # Azure only; falls back to LLM_API_VERSION
     transcribe_chunk_seconds: int = 600  # keeps each request well under the 25 MB API limit
+    transcribe_chunk_overlap_seconds: float = 3.0  # audio shared by neighbouring chunks (no word cut in half)
 
     # Diagram image export (headless Chromium). None = Playwright's bundled Chromium;
     # "chrome" = a locally installed Google Chrome (handy in dev).
@@ -49,6 +51,14 @@ class Settings(BaseSettings):
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str = "https://cloud.langfuse.com"
+
+    # Optional LLM cleanup of transcript text after the deterministic rules ("filter" role).
+    # Mostly useful for audio (ASR) transcripts; costs one extra pass over the transcript.
+    normalize_llm_cleanup: bool = False
+
+    # Transcripts longer than this (characters of relevant text, ~4 chars/token) are extracted
+    # in overlapping windows and merged. Keep well under the extract model's context window.
+    extract_max_chars: int = 60_000
 
     # Merge entity resolution: cosine >= auto -> same step; < reject -> different; else ask the LLM.
     merge_auto_match: float = 0.90

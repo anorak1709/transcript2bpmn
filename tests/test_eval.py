@@ -68,3 +68,29 @@ def test_failing_case_is_reported_not_raised() -> None:
     results = run_eval(broken, GOLD)
     assert results["failed"] == len(results["cases"])
     assert "boom" in results["cases"][0]["error"]
+
+
+def test_assignment_is_optimal() -> None:
+    import itertools
+    import random
+
+    from eval.metrics import assign
+
+    rng = random.Random(7)
+    for _ in range(200):
+        rows, cols = rng.randint(1, 5), rng.randint(1, 5)
+        w = [[rng.choice([0.0, rng.uniform(1, 2)]) for _ in range(cols)] for _ in range(rows)]
+        got = sum(w[r][c] for r, c in assign(w).items())
+        best = 0.0
+        for perm in itertools.permutations(range(max(rows, cols)), rows):
+            best = max(best, sum(w[r][c] for r, c in enumerate(perm) if c < cols))
+        assert abs(got - best) < 1e-9, w
+
+
+def test_assignment_beats_greedy_on_near_ties() -> None:
+    from eval.metrics import assign
+
+    # Greedy takes the single best pair (row 0 -> col 0, 1.9) and strands row 1 (it only fits
+    # col 0). Optimal pairs both rows: 1.85 + 1.88.
+    w = [[1.9, 1.85], [1.88, 0.0]]
+    assert assign(w) == {0: 1, 1: 0}

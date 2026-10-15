@@ -8,9 +8,9 @@ it keeps its editor id, gets no transcript citations, confidence 1.0, user_added
 from lxml import etree
 
 from app.models.process import Flow, Lane, Node, NodeType, OpenQuestion, ProcessModel
-from app.pipeline.convert import BPMN, BPMNDI, DC, UNASSIGNED_LANE, KeptPositions
+from app.pipeline.convert import BPMN, BPMNDI, DC, DI, UNASSIGNED_LANE, KeptPositions
 
-NS = {"bpmn": BPMN, "bpmndi": BPMNDI, "dc": DC}
+NS = {"bpmn": BPMN, "bpmndi": BPMNDI, "dc": DC, "di": DI}
 
 NODE_TYPES: dict[str, NodeType] = {
     "startEvent": "start_event",
@@ -120,6 +120,7 @@ def read_bpmn(xml: bytes, current: ProcessModel) -> tuple[ProcessModel, KeptPosi
     old_flows = {f.id for f in current.flows}
     exclusive = {node_id[el.get("id", "")] for el in process if _local(el) == "exclusiveGateway"}
     flows: list[Flow] = []
+    flow_id: dict[str, str] = {}  # xml id -> model id
     for el in process.iterfind("bpmn:sequenceFlow", NS):
         src, tgt = node_id.get(el.get("sourceRef", "")), node_id.get(el.get("targetRef", ""))
         if src is None or tgt is None:
@@ -127,9 +128,9 @@ def read_bpmn(xml: bytes, current: ProcessModel) -> tuple[ProcessModel, KeptPosi
         cond = (el.findtext("bpmn:conditionExpression", namespaces=NS) or "").strip()
         if not cond and src in exclusive:
             cond = (el.get("name") or "").strip()  # bpmn-js users label decision paths by name
-        flows.append(
-            Flow(id=_match(el.get("id", ""), "Flow", old_flows), source_id=src, target_id=tgt, condition=cond or None)
-        )
+        fid = _match(el.get("id", ""), "Flow", old_flows)
+        flow_id[el.get("id", "")] = fid
+        flows.append(Flow(id=fid, source_id=src, target_id=tgt, condition=cond or None))
 
     kept = set(node_id.values())
     questions = [
@@ -144,22 +145,31 @@ def read_bpmn(xml: bytes, current: ProcessModel) -> tuple[ProcessModel, KeptPosi
     participant = root.find("bpmn:collaboration/bpmn:participant", NS)
     name = (participant.get("name") if participant is not None else None) or process.get("name") or current.name
     model = ProcessModel(name=name, lanes=lanes, nodes=nodes, flows=flows, open_questions=questions)
-    return model, _positions(root, node_id, lane_of, xml_lane)
+    return model, _positions(root, node_id, lane_of, xml_lane, flow_id)
 
 
 def _positions(
-    root: etree._Element, node_id: dict[str, str], lane_of: dict[str, str], xml_lane: dict[str, str]
+    root: etree._Element,
+    node_id: dict[str, str],
+    lane_of: dict[str, str],
+    xml_lane: dict[str, str],
+    flow_id: dict[str, str],
 ) -> KeptPositions:
     bounds: dict[str, tuple[float, float]] = {}
     for shape in root.iterfind(".//bpmndi:BPMNShape", NS):
         b = shape.find("dc:Bounds", NS)
         if b is not None:
             bounds[shape.get("bpmnElement", "")] = (float(b.get("x", 0)), float(b.get("y", 0)))
-    out: KeptPositions = {}
+    out = KeptPositions()
     for xid, nid in node_id.items():
         lane = lane_of.get(xid)
         if lane is None or xid not in bounds or xml_lane.get(lane) not in bounds:
             continue
         x, y = bounds[xid]
-        out[nid] = (lane, x, y - bounds[xml_lane[lane]][1])
+        out.nodes[nid] = (lane, x, y - bounds[xml_lane[lane]][1], y)
+    for edge in root.iterfind(".//bpmndi:BPMNEdge", NS):
+        fid = flow_id.get(edge.get("bpmnElement", ""))
+        points = [(float(w.get("x", 0)), float(w.get("y", 0))) for w in edge.iterfind("di:waypoint", NS)]
+        if fid and len(points) >= 2:
+            out.edges[fid] = points
     return out

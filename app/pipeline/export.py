@@ -1,6 +1,8 @@
 """Exports: diagram images (rendered by bpmn-js, same as the editor) and a written SOP."""
 
+import contextlib
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Literal
 
@@ -15,41 +17,69 @@ class ExportError(RuntimeError):
     pass
 
 
+# Playwright's sync API is bound to the thread that started it, so one dedicated thread owns
+# a warm browser and every render runs there. Renders are serialized (one at a time), which
+# is plenty for exports; raise max_workers and keep one browser per thread if it isn't.
+_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="bpmn-export")
+_STATE: dict[str, Any] = {}  # touched only from the export thread; the browser exits with the process
+RENDER_TIMEOUT_S = 60
+
+
+def _page() -> Any:
+    from playwright.sync_api import sync_playwright
+
+    browser = _STATE.get("browser")
+    if browser is None or not browser.is_connected():
+        if "playwright" not in _STATE:
+            _STATE["playwright"] = sync_playwright().start()
+        channel = get_settings().export_browser_channel
+        chromium = _STATE["playwright"].chromium
+        browser = chromium.launch(channel=channel) if channel else chromium.launch()
+        _STATE["browser"] = browser
+    return browser.new_page(device_scale_factor=2)
+
+
+def _render(bpmn_xml: str, fmt: str) -> bytes:
+    from playwright.sync_api import Error
+
+    for attempt in (1, 2):  # a crashed browser gets one relaunch
+        page = None
+        try:
+            page = _page()
+            page.set_content('<div id="c" style="width:1600px;height:1000px"></div>')
+            page.add_script_tag(path=str(VIEWER_JS))  # bundled: no CDN call from the server
+            svg: str = page.evaluate(
+                """async (xml) => {
+                    const viewer = new BpmnJS({ container: '#c' });
+                    const { warnings } = await viewer.importXML(xml);
+                    if (warnings.length) console.warn(warnings);
+                    return (await viewer.saveSVG()).svg;
+                }""",
+                bpmn_xml,
+            )
+            if fmt == "svg":
+                return svg.encode()
+            page.set_content(f'<body style="margin:0;background:#fff">{svg}</body>')
+            png: bytes = page.locator("svg").first.screenshot(type="png")
+            return png
+        except Error as e:
+            _STATE.pop("browser", None)
+            if attempt == 2:
+                raise ExportError(f"Diagram rendering failed: {e.message.splitlines()[0]}") from e
+        finally:
+            if page is not None:
+                with contextlib.suppress(Error):  # the browser may already be gone
+                    page.close()
+    raise AssertionError("unreachable")
+
+
 def render_image(bpmn_xml: str, fmt: Literal["svg", "png"]) -> bytes:
     """Render with bpmn-js in headless Chromium, so exports look exactly like the editor.
 
-    Uses the bundled Playwright Chromium (`playwright install chromium`), or a locally
-    installed browser if EXPORT_BROWSER_CHANNEL is set (e.g. "chrome").
-    ponytail: one browser launch per export (~1 s). Keep a warm browser in the worker if
-    exports become frequent.
+    Uses Playwright's Chromium (`playwright install chromium`), or a locally installed browser
+    if EXPORT_BROWSER_CHANNEL is set (e.g. "chrome"). The browser stays warm between exports.
     """
-    from playwright.sync_api import Error, sync_playwright
-
-    channel = get_settings().export_browser_channel
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(channel=channel) if channel else p.chromium.launch()
-            try:
-                page = browser.new_page(device_scale_factor=2)
-                page.set_content('<div id="c" style="width:1600px;height:1000px"></div>')
-                page.add_script_tag(path=str(VIEWER_JS))  # bundled: no CDN call from the server
-                svg: str = page.evaluate(
-                    """async (xml) => {
-                        const viewer = new BpmnJS({ container: '#c' });
-                        const { warnings } = await viewer.importXML(xml);
-                        if (warnings.length) console.warn(warnings);
-                        return (await viewer.saveSVG()).svg;
-                    }""",
-                    bpmn_xml,
-                )
-                if fmt == "svg":
-                    return svg.encode()
-                page.set_content(f'<body style="margin:0;background:#fff">{svg}</body>')
-                return page.locator("svg").first.screenshot(type="png")
-            finally:
-                browser.close()
-    except Error as e:
-        raise ExportError(f"Diagram rendering failed: {e.message.splitlines()[0]}") from e
+    return _EXECUTOR.submit(_render, bpmn_xml, fmt).result(timeout=RENDER_TIMEOUT_S)
 
 
 def _ts(seconds: float | None) -> str:

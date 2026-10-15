@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app import maps, storage
 from app.audit import audit
 from app.auth import DB
+from app.core.config import get_settings
 from app.db.models import AuditLog, Conflict, Job, ProcessMap, Project, Transcript
 from app.models.process import ProcessModel
 from app.pipeline import ingest
@@ -192,7 +193,9 @@ async def process_transcript(transcript_id: str, request: Request, db: DB) -> Jo
     db.flush()
     audit(db, "process", "transcript", t.id, job_id=job.id)
     db.commit()
-    await request.app.state.arq.enqueue_job("process_transcript", job.id, _job_id=job.id)
+    await request.app.state.arq.enqueue_job(
+        "process_transcript", job.id, _job_id=job.id, _queue_name=get_settings().job_queue
+    )
     return _job_out(job)
 
 
