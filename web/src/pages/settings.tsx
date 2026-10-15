@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Check, Copy, KeyRound, Loader2, Plus } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
 import { Page } from "@/components/app-shell"
+import { PageHeader, Section } from "@/components/dossier"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,15 +15,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { api } from "@/lib/api"
-import { formatDate } from "@/lib/format"
+import { formatDate, formatDay } from "@/lib/format"
 import type { ApiKey } from "@/lib/types"
 
 function NewKey() {
@@ -50,8 +46,10 @@ function NewKey() {
           if (name.trim()) create.mutate()
         }}
       >
-        <div className="min-w-[220px] flex-1 space-y-2">
-          <Label htmlFor="key-name">New key name</Label>
+        <div className="min-w-[220px] flex-1 space-y-1.5">
+          <label htmlFor="key-name" className="label block">
+            New key name
+          </label>
           <Input
             id="key-name"
             placeholder="e.g. ci, zapier, alice-laptop"
@@ -60,15 +58,17 @@ function NewKey() {
             onChange={(e) => setName(e.target.value)}
           />
         </div>
-        <Button type="submit" disabled={!name.trim() || create.isPending}>
-          {create.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <Plus aria-hidden />} Create key
+        <Button type="submit" variant="outline" disabled={!name.trim() || create.isPending}>
+          {create.isPending ? "Creating…" : "Create key"}
         </Button>
       </form>
       {created && (
-        <div className="space-y-2 rounded-lg border border-primary/40 bg-muted/50 p-3" role="status">
-          <p className="text-sm font-medium">Copy this key now. It won't be shown again.</p>
+        <div className="space-y-2 border-l-2 border-ink bg-sheet py-3 pr-3 pl-4" role="status">
+          <p className="text-sm font-bold">Copy this key now. It won't be shown again.</p>
           <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 break-all rounded bg-background px-2 py-1.5 text-xs">{created}</code>
+            <code className="min-w-0 flex-1 rounded-sm border border-hairline bg-paper px-2 py-1.5 font-mono text-xs break-all">
+              {created}
+            </code>
             <Button
               size="sm"
               variant="outline"
@@ -79,7 +79,7 @@ function NewKey() {
                 )
               }
             >
-              {copied ? <Check aria-hidden /> : <Copy aria-hidden />} {copied ? "Copied" : "Copy"}
+              {copied ? "Copied" : "Copy"}
             </Button>
           </div>
         </div>
@@ -94,33 +94,28 @@ function RevokeButton({ k }: { k: ApiKey }) {
     mutationFn: () => api.revokeKey(k.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["keys"] })
-      toast.success(`Revoked "${k.name}"`)
+      toast.success(`Revoked “${k.name}”`)
     },
     onError: (e) => toast.error(e.message),
   })
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+        <Button variant="ghost" size="sm" className="text-graphite hover:text-oxblood">
           Revoke
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent>
+      <AlertDialogContent className="bg-sheet">
         <AlertDialogHeader>
-          <AlertDialogTitle>Revoke "{k.name}"?</AlertDialogTitle>
-          <AlertDialogDescription>
+          <AlertDialogTitle className="text-2xl">Revoke “{k.name}”?</AlertDialogTitle>
+          <AlertDialogDescription className="text-graphite">
             Anything using this key stops working immediately.
             {k.current && " This is the key this browser is signed in with: you'll be signed out."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-white hover:bg-destructive/90"
-            onClick={() => revoke.mutate()}
-          >
-            Revoke key
-          </AlertDialogAction>
+          <AlertDialogCancel>Keep it</AlertDialogCancel>
+          <AlertDialogAction onClick={() => revoke.mutate()}>Revoke key</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -128,18 +123,29 @@ function RevokeButton({ k }: { k: ApiKey }) {
 }
 
 const ACTION_LABEL: Record<string, string> = {
-  create: "Created project",
-  upload: "Uploaded",
+  create: "Opened a process file",
+  upload: "Added a meeting",
   process: "Started processing",
-  merge: "Merged a meeting",
-  edit: "Edited map",
+  merge: "Merged a meeting in",
+  edit: "Edited a map",
   export: "Exported",
-  delete: "Deleted project",
-  resolve_conflict: "Resolved conflict",
-  retention_purge: "Retention purge",
-  create_key: "Created API key",
-  revoke_key: "Revoked API key",
+  delete: "Deleted a process",
+  resolve_conflict: "Settled a point",
+  retention_purge: "Retention: content deleted",
+  create_key: "Created an API key",
+  revoke_key: "Revoked an API key",
 }
+
+/** Readable details only: ids are noise to a reader (they stay in the API). */
+function details(d: Record<string, unknown>): string {
+  return Object.entries(d)
+    .filter(([k, v]) => v != null && v !== "" && !k.endsWith("id"))
+    .map(([k, v]) => `${k.replace(/_/g, " ")} ${String(v)}`)
+    .join(" · ")
+}
+
+const TH = "label py-2 pr-3 text-left font-sans"
+const TD = "py-2.5 pr-3 align-baseline"
 
 export function Settings() {
   const keys = useQuery({ queryKey: ["keys"], queryFn: api.keys })
@@ -147,147 +153,122 @@ export function Settings() {
   const audit = useQuery({ queryKey: ["audit"], queryFn: () => api.audit(50) })
 
   return (
-    <Page title="Settings" description="API keys, usage and activity for your workspace.">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Card>
-          <CardHeader>
-            <CardTitle asChild className="flex items-center gap-2 text-base">
-              <h2>
-                <KeyRound className="size-4" aria-hidden /> API keys
-              </h2>
-            </CardTitle>
-            <CardDescription>Keys belong to your workspace. Only a hash of each key is stored.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <NewKey />
-            {keys.isPending ? (
-              <Skeleton className="h-24" />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Key</TableHead>
-                    <TableHead className="hidden sm:table-cell">Created</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-24">
-                      <span className="sr-only">Actions</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {keys.data?.map((k) => (
-                    <TableRow key={k.id}>
-                      <TableCell className="font-medium">{k.name}</TableCell>
-                      <TableCell>
-                        <code className="text-xs">t2b_{k.prefix}_…</code>
-                      </TableCell>
-                      <TableCell className="hidden text-muted-foreground sm:table-cell">
-                        {formatDate(k.created_at)}
-                      </TableCell>
-                      <TableCell>
-                        {k.revoked_at ? (
-                          <Badge variant="outline">Revoked</Badge>
-                        ) : k.current ? (
-                          <Badge>This browser</Badge>
-                        ) : (
-                          <Badge variant="secondary">Active</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">{!k.revoked_at && <RevokeButton k={k} />}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+    <Page>
+      <PageHeader eyebrow="Workspace" title="Settings" revision="API keys, usage and the record of who did what." />
 
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle asChild className="text-base">
-              <h2>This month</h2>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {usage.isPending ? (
-              <Skeleton className="h-20" />
-            ) : usage.data ? (
-              <dl className="space-y-3 text-sm">
-                <div>
-                  <dt className="text-muted-foreground">Meetings processed</dt>
-                  <dd className="text-2xl font-semibold tabular-nums">
-                    {usage.data.jobs_this_month}
-                    {usage.data.monthly_jobs_quota != null && (
-                      <span className="text-base font-normal text-muted-foreground">
-                        {" "}
-                        / {usage.data.monthly_jobs_quota}
-                      </span>
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Rate limits per key</dt>
-                  <dd>
-                    {usage.data.rate_limit_per_minute}/min, {usage.data.rate_limit_heavy_per_minute}/min for uploads,
-                    processing, chat and image exports
-                  </dd>
-                </div>
-              </dl>
-            ) : null}
-          </CardContent>
-        </Card>
+      <div className="grid gap-x-14 gap-y-14 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <Section title="API keys" id="keys" aside="Only a hash of each key is stored">
+          <NewKey />
+          {keys.isPending ? (
+            <Skeleton className="mt-6 h-24 rounded-sm bg-paper-shade" />
+          ) : (
+            <table className="mt-6 w-full text-[0.95rem]">
+              <caption className="sr-only">API keys</caption>
+              <thead className="border-b border-hairline">
+                <tr>
+                  <th className={TH}>Name</th>
+                  <th className={TH}>Key</th>
+                  <th className={`${TH} hidden sm:table-cell`}>Issued</th>
+                  <th className={TH}>Status</th>
+                  <th className="w-20">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {keys.data?.map((k) => (
+                  <tr key={k.id} className="border-b border-hairline">
+                    <td className={`${TD} font-bold`}>{k.name}</td>
+                    <td className={TD}>
+                      <code className="font-mono text-xs text-graphite">t2b_{k.prefix}_…</code>
+                    </td>
+                    <td className={`${TD} tabular hidden text-sm text-graphite sm:table-cell`}>
+                      {formatDay(k.created_at)}
+                    </td>
+                    <td className={`${TD} text-sm`}>
+                      {k.revoked_at ? (
+                        <span className="text-graphite">Revoked {formatDay(k.revoked_at)}</span>
+                      ) : k.current ? (
+                        "Active · this browser"
+                      ) : (
+                        "Active"
+                      )}
+                    </td>
+                    <td className="py-1 text-right">{!k.revoked_at && <RevokeButton k={k} />}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Section>
 
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle asChild className="text-base">
-              <h2>Recent activity</h2>
-            </CardTitle>
-            <CardDescription>Who did what, by API key. Meeting content is never logged here.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {audit.isPending ? (
-              <Skeleton className="h-32" />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>When</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead className="hidden md:table-cell">Details</TableHead>
-                    <TableHead className="hidden sm:table-cell">Key</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {audit.data?.map((a, i) => {
-                    const key = keys.data?.find((k) => k.id === a.api_key_id)
-                    const details = Object.entries(a.details)
-                      .filter(([, v]) => v != null && v !== "")
-                      .map(([k, v]) => `${k.replace(/_/g, " ")}: ${String(v)}`)
-                      .join(" · ")
-                    return (
-                      <TableRow key={i}>
-                        <TableCell className="whitespace-nowrap text-muted-foreground">
-                          {formatDate(a.created_at)}
-                        </TableCell>
-                        <TableCell>{ACTION_LABEL[a.action] ?? a.action}</TableCell>
-                        <TableCell
-                          className="hidden max-w-md truncate text-muted-foreground md:table-cell"
-                          title={details}
-                        >
-                          {details}
-                        </TableCell>
-                        <TableCell className="hidden text-muted-foreground sm:table-cell">
-                          {key ? key.name : a.api_key_id ? "(another key)" : "system"}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+        <Section title="This month" id="usage">
+          {usage.isPending ? (
+            <Skeleton className="h-20 rounded-sm bg-paper-shade" />
+          ) : usage.data ? (
+            <dl className="space-y-5">
+              <div>
+                <dt className="text-sm text-graphite">Meetings processed</dt>
+                <dd className="serif tabular text-[2.5rem] leading-none">
+                  {usage.data.jobs_this_month}
+                  {usage.data.monthly_jobs_quota != null && (
+                    <span className="text-2xl text-graphite"> of {usage.data.monthly_jobs_quota}</span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-graphite">Rate limits, per key</dt>
+                <dd className="tabular text-sm">
+                  {usage.data.rate_limit_per_minute} requests a minute; {usage.data.rate_limit_heavy_per_minute} for
+                  uploads, processing, chat edits and image exports
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+        </Section>
+
+        <Section
+          title="Activity"
+          id="activity"
+          className="lg:col-span-2"
+          aside="By API key · meeting content is never recorded here"
+        >
+          {audit.isPending ? (
+            <Skeleton className="h-32 rounded-sm bg-paper-shade" />
+          ) : (
+            <table className="w-full text-[0.95rem]">
+              <caption className="sr-only">Recent activity</caption>
+              <thead className="border-b border-hairline">
+                <tr>
+                  <th className={TH}>When</th>
+                  <th className={TH}>What</th>
+                  <th className={`${TH} hidden md:table-cell`}>Details</th>
+                  <th className={`${TH} hidden sm:table-cell`}>By</th>
+                </tr>
+              </thead>
+              <tbody>
+                {audit.data?.map((a, i) => {
+                  const key = keys.data?.find((k) => k.id === a.api_key_id)
+                  const d = details(a.details)
+                  return (
+                    <tr key={i} className="border-b border-hairline">
+                      <td className={`${TD} tabular text-sm whitespace-nowrap text-graphite`}>
+                        {formatDate(a.created_at)}
+                      </td>
+                      <td className={TD}>{ACTION_LABEL[a.action] ?? a.action}</td>
+                      <td className={`${TD} hidden max-w-md truncate text-sm text-graphite md:table-cell`} title={d}>
+                        {d}
+                      </td>
+                      <td className={`${TD} hidden text-sm text-graphite sm:table-cell`}>
+                        {key ? key.name : a.api_key_id ? "another key" : "the system"}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </Section>
       </div>
     </Page>
   )

@@ -143,8 +143,10 @@ def test_retention_purges_raw_files_and_text_but_keeps_maps() -> None:
     keep_tid = keep.upload("transcript_1.vtt", (CASE / "transcript_1.vtt").read_bytes()).json()["id"]
     keep.process(keep_tid, FakeLLM(ProcessModel.model_validate_json((CASE / "model_1.json").read_text())))
 
-    assert purge_expired(now=datetime.now(UTC) + timedelta(days=29)) == 0
-    assert purge_expired(now=datetime.now(UTC) + timedelta(days=31)) >= 1
+    # Scoped to this test's orgs: "31 days later" must never purge other data in the database.
+    mine = {t.org_id, keep.org_id}
+    assert purge_expired(now=datetime.now(UTC) + timedelta(days=29), only_orgs=mine) == 0
+    assert purge_expired(now=datetime.now(UTC) + timedelta(days=31), only_orgs=mine) == 1
 
     with system_session() as db:
         purged, kept = db.get_one(Transcript, tid), db.get_one(Transcript, keep_tid)

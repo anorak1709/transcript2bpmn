@@ -1,13 +1,10 @@
-import { KeyRound, Loader2, Workflow } from "lucide-react"
 import { useState } from "react"
 
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { setApiKey, verifyKey } from "@/lib/api"
 
+/** A dossier title page: the product name set large, one field, one action. */
 export function SignIn() {
   const [key, setKey] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -34,49 +31,52 @@ export function SignIn() {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Workflow className="size-5 text-foreground" aria-hidden />
-            Transcript to BPMN
-          </div>
-          <CardTitle asChild className="text-2xl">
-            <h1>Sign in with an API key</h1>
-          </CardTitle>
-          <CardDescription>Your workspace admin issues keys. The key is stored only in this browser.</CardDescription>
-        </CardHeader>
-        <form onSubmit={submit} noValidate>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="api-key">API key</Label>
-              <Input
-                id="api-key"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="t2b_…"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                aria-invalid={!!error}
-                aria-describedby={error ? "api-key-error" : undefined}
-                autoFocus
-              />
-            </div>
-            {error && (
-              <Alert variant="destructive" id="api-key-error">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-          <CardFooter className="pt-6">
-            <Button type="submit" className="w-full" disabled={checking || !key.trim()}>
-              {checking ? <Loader2 className="animate-spin" aria-hidden /> : <KeyRound aria-hidden />}
-              {checking ? "Checking key…" : "Continue"}
+    <main className="flex min-h-svh flex-col bg-paper">
+      <div className="mx-auto flex w-full max-w-[560px] flex-1 flex-col justify-center px-6 py-16">
+        <p className="label mb-6">A process mapping workspace</p>
+        <h1 className="text-[3.5rem] leading-[1.02] tracking-[-0.015em]">
+          Transcript <span className="text-graphite italic">to</span> BPMN
+        </h1>
+        <p className="serif measure mt-4 text-xl leading-snug text-graphite italic">
+          Meetings, set down as process maps: every step traced to the words that described it.
+        </p>
+        <hr className="my-10 border-rule" />
+        <form onSubmit={submit} noValidate className="space-y-3">
+          <label htmlFor="api-key" className="label block">
+            API key
+          </label>
+          <Input
+            id="api-key"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="t2b_…"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            aria-invalid={!!error}
+            aria-describedby={error ? "api-key-error" : "api-key-help"}
+            className="font-mono text-sm"
+            autoFocus
+          />
+          {error ? (
+            <p id="api-key-error" role="alert" className="text-sm text-oxblood">
+              {error}
+            </p>
+          ) : (
+            <p id="api-key-help" className="text-sm text-graphite">
+              Issued by your workspace admin. Kept only in this browser.
+            </p>
+          )}
+          <div className="pt-3">
+            <Button type="submit" disabled={checking || !key.trim()}>
+              {checking ? "Checking key…" : "Open the workspace"}
             </Button>
-          </CardFooter>
+          </div>
         </form>
-      </Card>
+      </div>
+      <footer className="smallcaps border-t border-hairline px-6 py-4 text-center text-xs text-graphite">
+        BPMN 2.0 · exports for Camunda and Signavio
+      </footer>
     </main>
   )
 }

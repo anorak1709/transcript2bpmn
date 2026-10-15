@@ -1,0 +1,67 @@
+/* bpmn-js themed as a sheet on paper (MASTER: diagram "themed to match"). */
+.bpmn-canvas,
+.bpmn-canvas.djs-parent,
+.bpmn-canvas .djs-parent {
+  /* compound selector: diagram-js declares its defaults on .djs-parent (same element) */
+  --canvas-fill-color: var(--paper);
+  --accent-color: var(--oxblood);
+  --element-selected-outline-stroke-color: var(--oxblood);
+  --element-selected-outline-secondary-stroke-color: var(--rule);
+  --element-hover-outline-fill-color: var(--graphite);
+  --lasso-stroke-color: var(--oxblood);
+  --lasso-fill-color: rgba(139, 46, 42, 0.06);
+  --palette-background-color: var(--sheet);
+  --palette-border-color: var(--rule);
+  --palette-entry-color: var(--ink);
+  --palette-entry-hover-color: var(--oxblood);
+  --palette-entry-selected-color: var(--oxblood);
+  --palette-separator-color: var(--hairline);
+  --context-pad-entry-background-color: var(--sheet);
+  --context-pad-entry-hover-background-color: var(--paper-shade);
+  --popup-background-color: var(--sheet);
+  --popup-border-color: var(--rule);
+  --popup-entry-hover-color: var(--paper-shade);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.bpmn-canvas .djs-palette {
+  border-radius: 3px;
+  box-shadow: none;
+}
+
+.bpmn-canvas .djs-direct-editing-parent {
+  font-family: "EB Garamond Variable", "EB Garamond", Georgia, serif !important;
+}
+
+/* A step in dispute: oxblood rule around it. */
+.bpmn-canvas .t2b-disputed .djs-visual > :first-child {
+  stroke: var(--oxblood) !important;
+  stroke-width: 2px !important;
+}
+
+/* The point's numeral, set like a margin note. */
+.t2b-dispute-mark {
+  display: inline-block;
+  min-width: 1.4rem;
+  padding: 0 0.4rem;
+  border-radius: 2px;
+  background: var(--oxblood);
+  color: var(--paper);
+  font:
+    italic 600 14px/1.45 "EB Garamond Variable",
+    "EB Garamond",
+    Georgia,
+    serif;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Keyboard focus on the canvas uses the design system's ring; no browser default on click. */
+.bpmn-canvas svg:focus {
+  outline: none;
+}
+.bpmn-canvas svg:focus-visible {
+  outline: 2px solid var(--oxblood);
+  outline-offset: -2px;
+}

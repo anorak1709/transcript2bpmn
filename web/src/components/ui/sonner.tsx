@@ -1,37 +1,29 @@
-import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
-import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
+import { Check, Info, TriangleAlert, X, Contrast } from "lucide-react"
 
-const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
-
-  return (
-    <Sonner
-      theme={theme as ToasterProps["theme"]}
-      className="toaster group"
-      icons={{
-        success: <CircleCheckIcon className="size-4" />,
-        info: <InfoIcon className="size-4" />,
-        warning: <TriangleAlertIcon className="size-4" />,
-        error: <OctagonXIcon className="size-4" />,
-        loading: <Loader2Icon className="size-4 animate-spin" />,
-      }}
-      style={
-        {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius)",
-        } as React.CSSProperties
-      }
-      toastOptions={{
-        classNames: {
-          toast: "cn-toast",
-        },
-      }}
-      {...props}
-    />
-  )
-}
+/** Toasts styled as paper slips: sheet, hairline rule, ink text, monochrome glyphs. */
+const Toaster = ({ ...props }: ToasterProps) => (
+  <Sonner
+    theme="light"
+    className="toaster group"
+    icons={{
+      success: <Check className="size-4" aria-hidden />,
+      info: <Info className="size-4" aria-hidden />,
+      warning: <TriangleAlert className="size-4" aria-hidden />,
+      error: <X className="size-4 text-oxblood" aria-hidden />,
+      loading: <Contrast className="size-4" aria-hidden />,
+    }}
+    style={
+      {
+        "--normal-bg": "var(--sheet)",
+        "--normal-text": "var(--ink)",
+        "--normal-border": "var(--rule)",
+        "--border-radius": "var(--radius)",
+      } as React.CSSProperties
+    }
+    toastOptions={{ classNames: { toast: "cn-toast font-sans", description: "!text-graphite" } }}
+    {...props}
+  />
+)
 
 export { Toaster }

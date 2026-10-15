@@ -14,7 +14,7 @@ from app import maps, storage
 from app.audit import audit
 from app.auth import DB, CurrentPrincipal
 from app.core.config import get_settings
-from app.db.models import AuditLog, Conflict, Job, Organization, Project, Transcript
+from app.db.models import AuditLog, Conflict, Job, MapVersion, Organization, ProcessMap, Project, Transcript
 from app.models.process import ProcessModel
 from app.pipeline import ingest
 from app.pipeline.edit import AnyOp, ResolveOpenQuestion, apply_ops
@@ -59,6 +59,8 @@ class ProjectOut(BaseModel):
     name: str
     retention_days: int | None
     merged_map_id: str | None
+    map_version: int | None  # merged map's current version (for the "revised … · vN" line)
+    revised_at: datetime | None  # when the merged map last changed
     open_conflicts: int
     transcripts: list[TranscriptOut]
 
@@ -130,11 +132,23 @@ def get_project(project_id: str, db: DB) -> ProjectOut:
     ):
         latest[job.transcript_id] = job  # ordered by time: the last one wins
     open_conflicts = db.scalars(select(Conflict.id).where(Conflict.project_id == p.id, Conflict.status == "open")).all()
+    merged = db.get(ProcessMap, p.merged_map_id) if p.merged_map_id else None
+    revised = (
+        db.scalar(
+            select(MapVersion.created_at).where(
+                MapVersion.map_id == merged.id, MapVersion.version == merged.current_version
+            )
+        )
+        if merged
+        else None
+    )
     return ProjectOut(
         id=p.id,
         name=p.name,
         retention_days=p.retention_days,
         merged_map_id=p.merged_map_id,
+        map_version=merged.current_version if merged else None,
+        revised_at=revised,
         open_conflicts=len(open_conflicts),
         transcripts=[_transcript_out(t, job=latest.get(t.id)) for t in transcripts],
     )

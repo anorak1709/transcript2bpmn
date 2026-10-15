@@ -27,6 +27,8 @@ export interface Project {
   name: string
   retention_days: number | null
   merged_map_id: string | null
+  map_version: number | null
+  revised_at: string | null
   open_conflicts: number
   transcripts: Transcript[]
 }

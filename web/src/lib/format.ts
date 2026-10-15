@@ -33,3 +33,45 @@ export const STATUS_LABEL: Record<JobStatus, string> = {
 export const AUDIO_EXTENSIONS = [".mp3", ".m4a", ".wav", ".webm", ".mp4"]
 export const TEXT_EXTENSIONS = [".vtt", ".srt", ".txt", ".docx"]
 export const ACCEPTED_UPLOADS = [...TEXT_EXTENSIONS, ...AUDIO_EXTENSIONS].join(",")
+
+/** 1 -> "i", 4 -> "iv": disagreements are numbered like clauses in a dossier. */
+export function roman(n: number): string {
+  const table: [number, string][] = [
+    [1000, "m"],
+    [900, "cm"],
+    [500, "d"],
+    [400, "cd"],
+    [100, "c"],
+    [90, "xc"],
+    [50, "l"],
+    [40, "xl"],
+    [10, "x"],
+    [9, "ix"],
+    [5, "v"],
+    [4, "iv"],
+    [1, "i"],
+  ]
+  let out = ""
+  let rest = n
+  for (const [value, numeral] of table) {
+    while (rest >= value) {
+      out += numeral
+      rest -= value
+    }
+  }
+  return out
+}
+
+const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"]
+
+/** 2, "meeting" -> "Two meetings" (spelled out to ten, like prose). Irregular plurals:
+ *  countOf(2, "process", "processes"). */
+export function countOf(n: number, noun: string, plural = `${noun}s`): string {
+  return `${WORDS[n] ?? n} ${n === 1 ? noun : plural}`
+}
+
+/** "14 Oct 2026" */
+export function formatDay(iso: string | null | undefined): string {
+  if (!iso) return ""
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+}

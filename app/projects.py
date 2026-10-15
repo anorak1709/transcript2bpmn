@@ -77,17 +77,18 @@ def delete_project(db: Session, project: Project) -> dict[str, int]:
     return counts
 
 
-def purge_expired(now: datetime | None = None) -> int:
+def purge_expired(now: datetime | None = None, only_orgs: set[str] | None = None) -> int:
     """Retention: for projects with retention_days, delete each transcript's raw file and its
     text (segments) once it's older than that. Maps stay; their source quotes show as expired.
-    Returns how many transcripts were purged."""
+    Returns how many transcripts were purged. `only_orgs` limits the sweep (tests use it so a
+    simulated "31 days later" can never touch other data in the same database)."""
     now = now or datetime.now(UTC)
     purged = 0
     with system_session() as sys_db:
-        projects = [
-            (p.id, p.organization_id, p.retention_days)
-            for p in sys_db.scalars(select(Project).where(Project.retention_days.is_not(None)))
-        ]
+        q = select(Project).where(Project.retention_days.is_not(None))
+        if only_orgs is not None:
+            q = q.where(Project.organization_id.in_(only_orgs))
+        projects = [(p.id, p.organization_id, p.retention_days) for p in sys_db.scalars(q)]
     for project_id, org_id, days in projects:
         cutoff = now - timedelta(days=days or 0)
         with system_session() as db:

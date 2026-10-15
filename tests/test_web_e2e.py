@@ -8,6 +8,7 @@ Needs: compose services, a built frontend (`make web-build`), and Chromium
 (`playwright install chromium`) or a local Chrome.
 """
 
+import re
 import shutil
 import socket
 import threading
@@ -105,15 +106,31 @@ def test_main_workflow_in_the_browser(server: str) -> None:
 
         # Sign in
         page.goto(f"{server}/")
-        expect(page.get_by_role("heading", name="Sign in with an API key")).to_be_visible()
+        expect(page.get_by_role("heading", name="Transcript to BPMN")).to_be_visible()
         page.get_by_label("API key").fill("t2b_wrong_key")
-        page.get_by_role("button", name="Continue").click()
+        page.get_by_role("button", name="Open the workspace").click()
         expect(page.get_by_text("That key isn't valid or was revoked.")).to_be_visible()
         page.get_by_label("API key").fill(t.key)
-        page.get_by_role("button", name="Continue").click()
+        page.get_by_role("button", name="Open the workspace").click()
 
         # Projects list -> project
-        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+        expect(page.get_by_role("heading", name="Processes")).to_be_visible()
+        # The design system is what's actually rendered (MASTER.md): paper, ink, serif, oxblood.
+        style = page.evaluate(
+            """() => {
+              const cs = (el) => getComputedStyle(el)
+              const h1 = document.querySelector("h1")
+              const primary = [...document.querySelectorAll("button")]
+                .find((b) => b.textContent.includes("New process"))
+              return { bg: cs(document.body).backgroundColor, h1: cs(h1).fontFamily, body: cs(document.body).fontFamily,
+                       primary: cs(primary).backgroundColor }
+            }"""
+        )
+        assert style["bg"] == "rgb(253, 251, 247)" and style["primary"] == "rgb(139, 46, 42)", style
+        assert "EB Garamond" in style["h1"] and "Lato" in style["body"], style
+        page.keyboard.press("Tab")  # keyboard focus shows the 2px oxblood ring
+        ring = page.evaluate("() => getComputedStyle(document.activeElement).outlineColor")
+        assert ring == "rgb(139, 46, 42)", ring
         page.get_by_role("link", name="Invoices").click()
         expect(page.get_by_role("heading", name="Invoices")).to_be_visible()
 
@@ -121,7 +138,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         page.locator("#upload-input").set_input_files(str(CASE / "transcript_1.vtt"))
         expect(page.get_by_text("transcript_1.vtt uploaded")).to_be_visible()
         expect(page.get_by_role("cell", name="transcript_1.vtt", exact=True)).to_be_visible()
-        expect(page.get_by_text("Queued")).to_be_visible()
+        expect(page.get_by_text(re.compile(r"^Queued"))).to_be_visible()
         _process_latest(t, "transcript_1.vtt", "model_1.json")
         expect(page.get_by_text("Done")).to_be_visible(timeout=10_000)  # polling picked it up
 
@@ -129,20 +146,20 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         page.locator("#upload-input").set_input_files(str(CASE / "transcript_2.txt"))
         expect(page.get_by_role("cell", name="transcript_2.txt", exact=True)).to_be_visible()
         _process_latest(t, "transcript_2.txt", "model_2.json")
-        expect(page.get_by_role("button", name="Use: Treasury")).to_be_visible(timeout=10_000)
+        expect(page.get_by_role("button", name="Settle as Treasury")).to_be_visible(timeout=10_000)
         page.screenshot(path=str(SHOTS / "e2e-project.png"))
 
         # Merged map in the editor
-        page.get_by_role("link", name="Open map").click()
+        page.get_by_role("link", name="Open the map").click()
         expect(page.locator(".bpmn-canvas svg").first).to_be_visible()
         expect(page.locator('.bpmn-canvas [data-element-id="Node_t_bank"]')).to_be_visible()
-        expect(page.get_by_text("v2", exact=True)).to_be_visible()
+        expect(page.get_by_text(re.compile(r"^v2 ·"))).to_be_visible()
 
         # Apply a conflict option from the Questions tab
         page.get_by_role("tab", name="Questions (3)").click()
-        page.get_by_role("button", name="Use: Treasury").click()
+        page.get_by_role("button", name="Settle as Treasury").click()
         expect(page.get_by_text("Applied to the map")).to_be_visible()
-        expect(page.get_by_text("v3", exact=True)).to_be_visible()
+        expect(page.get_by_text(re.compile(r"^v3 ·"))).to_be_visible()
 
         # Select a step on the canvas -> its transcript quotes
         page.locator('.bpmn-canvas [data-element-id="Node_t_pay"]').click()
@@ -157,7 +174,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         page.get_by_label("Describe a change").fill("call it release supplier payment")
         page.keyboard.press("Enter")
         expect(page.get_by_text("Renamed the payment step.")).to_be_visible()
-        expect(page.get_by_text("v4", exact=True)).to_be_visible()
+        expect(page.get_by_text(re.compile(r"^v4 ·"))).to_be_visible()
         page.screenshot(path=str(SHOTS / "e2e-editor.png"))
 
         # Concurrent edit: another client changes the map behind this editor's back (v4 -> v3).
@@ -168,7 +185,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         expect(page.get_by_text("you have v4, it's now v3")).to_be_visible()
         page.get_by_role("button", name="Reload latest").click()
         expect(page.get_by_role("alertdialog")).to_be_hidden()
-        expect(page.get_by_text("v3", exact=True)).to_be_visible()
+        expect(page.get_by_text(re.compile(r"^v3 ·"))).to_be_visible()
         assert t.http.get(f"/maps/{map_id}").json()["version"] == 3  # the stale undo wrote nothing
         page.screenshot(path=str(SHOTS / "e2e-reloaded.png"))
 
@@ -179,11 +196,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         expect(page.get_by_text("Copy this key now")).to_be_visible()
         expect(page.locator("code").filter(has_text="t2b_").first).to_be_visible()
 
-        # Dark mode renders too
-        page.emulate_media(color_scheme="dark")
-        page.get_by_role("button", name="Change theme").click()
-        page.get_by_role("menuitem", name="Dark").click()
-        page.screenshot(path=str(SHOTS / "e2e-settings-dark.png"), full_page=True)
+        page.screenshot(path=str(SHOTS / "e2e-settings.png"), full_page=True)
         browser.close()
 
     # Exactly two failed requests are part of the script: the wrong key at sign-in (401) and

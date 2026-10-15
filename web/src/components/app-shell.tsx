@@ -1,5 +1,4 @@
-import { FolderKanban, KeyRound, LogOut, Monitor, Moon, Settings, Sun, Workflow } from "lucide-react"
-import { useTheme } from "next-themes"
+import { KeyRound, LogOut } from "lucide-react"
 import { NavLink, Outlet } from "react-router"
 
 import { Button } from "@/components/ui/button"
@@ -15,78 +14,58 @@ import { setApiKey } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const NAV = [
-  { to: "/projects", label: "Projects", icon: FolderKanban },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/projects", label: "Projects" },
+  { to: "/settings", label: "Settings" },
 ]
 
-function ThemeMenu() {
-  const { theme, setTheme } = useTheme()
-  const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Change theme">
-          <Icon aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Theme</DropdownMenuLabel>
-        <DropdownMenuItem onSelect={() => setTheme("light")}>
-          <Sun aria-hidden /> Light
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setTheme("dark")}>
-          <Moon aria-hidden /> Dark
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setTheme("system")}>
-          <Monitor aria-hidden /> System
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
+/** Masthead (MASTER: top bar): serif wordmark, small-caps sections, hairline beneath. */
 export function AppShell() {
   return (
-    <div className="flex min-h-svh flex-col bg-background">
+    <div className="flex min-h-svh flex-col bg-paper">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:ring-2 focus:ring-ring"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-4 focus:z-50 focus:bg-sheet focus:px-3 focus:py-2"
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-2 px-4">
-          <NavLink to="/projects" className="mr-4 flex items-center gap-2 font-semibold tracking-tight">
-            <Workflow className="size-5" aria-hidden />
-            <span className="hidden sm:inline">Transcript to BPMN</span>
+      <header className="border-b border-rule bg-paper">
+        <div className="mx-auto flex h-14 max-w-[1120px] items-center gap-3 px-4 sm:gap-8 sm:px-6">
+          <NavLink
+            to="/projects"
+            className="serif inline-flex min-h-9 shrink-0 items-center text-[1.15rem] leading-none font-[560] tracking-[-0.01em] sm:text-[1.35rem]"
+          >
+            Transcript <span className="text-graphite italic">to</span> BPMN
           </NavLink>
-          <nav aria-label="Main" className="flex items-center gap-1">
-            {NAV.map(({ to, label, icon: Icon }) => (
+          <nav aria-label="Main" className="flex items-center gap-0 sm:gap-1">
+            {NAV.map(({ to, label }) => (
               <NavLink
                 key={to}
                 to={to}
                 className={({ isActive }) =>
                   cn(
-                    "inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                    isActive && "bg-accent text-accent-foreground",
+                    "smallcaps transition-quiet inline-flex h-9 items-center border-b-2 px-2 text-[0.95rem] font-bold",
+                    isActive ? "border-ink text-ink" : "border-transparent text-graphite hover:text-ink",
                   )
                 }
               >
-                <Icon className="size-4" aria-hidden />
                 {label}
               </NavLink>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-1">
-            <ThemeMenu />
+          <div className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Account">
-                  <KeyRound aria-hidden />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="smallcaps text-graphite"
+                  aria-label="Signed in: account menu"
+                >
+                  <KeyRound aria-hidden /> <span className="hidden sm:inline">Signed in</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Signed in with an API key</DropdownMenuLabel>
+                <DropdownMenuLabel className="font-normal text-graphite">Signed in with an API key</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setApiKey(null)}>
                   <LogOut aria-hidden /> Sign out of this browser
@@ -103,28 +82,9 @@ export function AppShell() {
   )
 }
 
-/** Standard page width + heading for list/detail pages (the editor uses the full width). */
-export function Page({
-  title,
-  description,
-  actions,
-  children,
-}: {
-  title: React.ReactNode
-  description?: React.ReactNode
-  actions?: React.ReactNode
-  children: React.ReactNode
-}) {
+/** Document page: 1120px measure with generous margins (MASTER: compact tables in airy pages). */
+export function Page({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 space-y-1">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">{title}</h1>
-          {description && <p className="text-sm text-muted-foreground">{description}</p>}
-        </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-      </div>
-      {children}
-    </div>
+    <div className={cn("mx-auto w-full max-w-[1120px] px-4 pt-10 pb-20 sm:px-6 sm:pt-12", className)}>{children}</div>
   )
 }

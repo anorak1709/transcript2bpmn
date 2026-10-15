@@ -1,25 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import {
-  AlertTriangle,
-  ArrowLeft,
-  Download,
-  History,
-  Loader2,
-  Maximize,
-  MessageSquare,
-  Quote,
-  Save,
-  SendHorizontal,
-  Undo2,
-  UserPen,
-} from "lucide-react"
+import { History, Maximize } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useBlocker, useParams } from "react-router"
 import { toast } from "sonner"
 
-import { BpmnCanvas, type BpmnCanvasHandle } from "@/components/bpmn-canvas"
-import { ConflictCard } from "@/components/conflict-card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { BpmnCanvas, type BpmnCanvasHandle, type Dispute } from "@/components/bpmn-canvas"
+import { ConflictPoint } from "@/components/conflict-card"
+import { SourceQuote } from "@/components/dossier"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +17,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -39,7 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, downloadText, isStale } from "@/lib/api"
-import { formatDate, formatTimestamp } from "@/lib/format"
+import { formatDate, formatTimestamp, roman } from "@/lib/format"
 import type { ProcessMap, ProcessNode } from "@/lib/types"
 import { ExportMenu } from "@/pages/project"
 
@@ -52,62 +38,86 @@ function modelNodeId(map: ProcessMap, xmlId: string): string | null {
 
 const NODE_TYPE_LABEL: Record<ProcessNode["type"], string> = {
   start_event: "Start",
-  end_event: "End",
-  user_task: "Task (person)",
-  service_task: "Task (system)",
+  end_event: "Outcome",
+  user_task: "Step · done by a person",
+  service_task: "Step · done by a system",
   exclusive_gateway: "Decision",
-  parallel_gateway: "Parallel split / join",
+  parallel_gateway: "Parallel work",
 }
 
-function SelectedStep({ map, xmlId }: { map: ProcessMap; xmlId: string | null }) {
-  if (!xmlId) return <p className="text-sm text-muted-foreground">Select a step to see where it came from.</p>
+/** Which transcript a merged-map citation (`<transcript_id>:s3`) came from, if any. */
+const meetingOf = (segmentId: string) => (segmentId.includes(":") ? segmentId.split(":")[0] : null)
+
+function SelectedStep({
+  map,
+  xmlId,
+  points,
+}: {
+  map: ProcessMap
+  xmlId: string | null
+  points: Map<string, number[]>
+}) {
+  if (!xmlId)
+    return (
+      <p className="serif py-2 text-[1.05rem] text-graphite italic">
+        Select a step on the map to read where it came from.
+      </p>
+    )
   const nodeId = modelNodeId(map, xmlId)
   const node = map.model.nodes.find((n) => n.id === nodeId)
-  if (!node) return <p className="text-sm text-muted-foreground">Not saved yet. Save to keep this element.</p>
+  if (!node) return <p className="py-2 text-sm text-graphite">Not saved yet. Save to keep this element.</p>
   const lane = map.model.lanes.find((l) => l.id === node.lane_id)
   const segments = new Map(map.segments.map((s) => [s.segment_id, s]))
+  const meetings = [...new Set(node.source_segment_ids.map(meetingOf).filter(Boolean))]
+  const disputed = points.get(node.id)
   return (
-    <div className="space-y-3">
-      <div className="space-y-1">
-        <h3 className="font-semibold leading-snug">{node.name || "(unnamed)"}</h3>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>{NODE_TYPE_LABEL[node.type]}</span>
-          <span aria-hidden>·</span>
-          <span>{lane?.name ?? node.lane_id}</span>
-          {node.user_added ? (
-            <Badge variant="secondary">
-              <UserPen aria-hidden /> Added by you
-            </Badge>
-          ) : node.confidence < 0.6 ? (
-            <Badge variant="outline">Low confidence {Math.round(node.confidence * 100)}%</Badge>
-          ) : null}
-        </div>
+    <div className="space-y-5">
+      <div>
+        <p className="label">{NODE_TYPE_LABEL[node.type]}</p>
+        <h3 className="mt-1 text-2xl leading-tight">{node.name || "(unnamed)"}</h3>
+        <p className="mt-1 text-sm text-graphite">
+          {lane?.name ?? node.lane_id}
+          {node.user_added
+            ? " · added by hand"
+            : node.confidence < 0.6
+              ? ` · low confidence (${Math.round(node.confidence * 100)}%)`
+              : ""}
+          {meetings.length > 1 ? ` · described in ${meetings.length} meetings` : ""}
+        </p>
+        {disputed && (
+          <p className="mt-2 text-sm text-oxblood">
+            In dispute: see point{disputed.length > 1 ? "s" : ""} {disputed.map((n) => `${roman(n)}.`).join(", ")}
+          </p>
+        )}
       </div>
-      {node.source_segment_ids.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No transcript source.</p>
-      ) : (
-        <ul className="space-y-2" aria-label="Where this step came from">
-          {node.source_segment_ids.map((id) => {
-            const s = segments.get(id)
-            return (
-              <li key={id} className="rounded-md border-l-2 border-primary/60 bg-muted/50 px-3 py-2 text-sm">
-                {s ? (
-                  <>
-                    <p className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
-                      <Quote className="size-3" aria-hidden />
-                      {s.speaker ?? "Unknown"}
-                      {s.start_ts != null && ` · ${formatTimestamp(s.start_ts)}`}
+      <div>
+        <p className="label mb-2 border-b border-hairline pb-1">Sources</p>
+        {node.source_segment_ids.length === 0 ? (
+          <p className="text-sm text-graphite">No transcript source: this step was added by hand.</p>
+        ) : (
+          <ol className="space-y-4" aria-label="Where this step came from">
+            {node.source_segment_ids.map((id, i) => {
+              const s = segments.get(id)
+              return (
+                <li key={id}>
+                  {s ? (
+                    <SourceQuote
+                      index={i + 1}
+                      speaker={s.speaker ?? "Unknown speaker"}
+                      when={s.start_ts != null ? formatTimestamp(s.start_ts) : undefined}
+                      text={s.text}
+                    />
+                  ) : (
+                    <p className="text-sm text-graphite">
+                      {i + 1}. Source text no longer available (deleted by the retention policy).
                     </p>
-                    <p>{s.text}</p>
-                  </>
-                ) : (
-                  <p className="text-muted-foreground">Source text no longer available (retention policy).</p>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      )}
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+        )}
+      </div>
     </div>
   )
 }
@@ -117,15 +127,16 @@ interface ChatLine {
   text: string
 }
 
+const SOURCE_LABEL = {
+  extract: "Drafted from a meeting",
+  chat: "Edited by instruction",
+  visual: "Edited on the diagram",
+  merge: "Meeting merged in",
+  resolve: "Point settled",
+}
+
 function HistorySheet({ mapId, version }: { mapId: string; version: number }) {
   const { data, isPending } = useQuery({ queryKey: ["versions", mapId, version], queryFn: () => api.versions(mapId) })
-  const label = {
-    extract: "Extracted",
-    chat: "Chat edit",
-    visual: "Edited in diagram",
-    merge: "Meeting merged",
-    resolve: "Conflict resolved",
-  }
   return (
     <Sheet>
       <Tooltip>
@@ -138,26 +149,31 @@ function HistorySheet({ mapId, version }: { mapId: string; version: number }) {
         </TooltipTrigger>
         <TooltipContent>Version history</TooltipContent>
       </Tooltip>
-      <SheetContent>
+      <SheetContent className="bg-paper">
         <SheetHeader>
-          <SheetTitle>Version history</SheetTitle>
-          <SheetDescription>Every change is a version. Undo steps back one at a time.</SheetDescription>
+          <SheetTitle className="serif text-2xl font-[560]">Revisions</SheetTitle>
+          <SheetDescription className="text-graphite">
+            Every change is kept. Undo steps back one at a time.
+          </SheetDescription>
         </SheetHeader>
         <ScrollArea className="h-[calc(100svh-8rem)] px-4">
           {isPending ? (
-            <Skeleton className="h-40" />
+            <Skeleton className="h-40 bg-paper-shade" />
           ) : (
-            <ol className="space-y-3 pb-6">
+            <ol className="pb-6">
               {[...(data ?? [])].reverse().map((v) => (
-                <li key={v.version} className="rounded-md border p-3 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">
-                      v{v.version} · {label[v.source] ?? v.source}
-                    </span>
-                    {v.version === version && <Badge>Current</Badge>}
+                <li key={v.version} className="grid grid-cols-[3rem_1fr] gap-x-3 border-b border-hairline py-3">
+                  <span className="serif tabular text-lg">v{v.version}</span>
+                  <div>
+                    <p className="text-sm font-bold">
+                      {SOURCE_LABEL[v.source] ?? v.source}
+                      {v.version === version && (
+                        <span className="smallcaps ml-2 font-normal text-graphite">current</span>
+                      )}
+                    </p>
+                    {v.instruction && <p className="serif mt-0.5 text-[1.02rem] italic">“{v.instruction}”</p>}
+                    <p className="tabular mt-0.5 text-xs text-graphite">{formatDate(v.created_at)}</p>
                   </div>
-                  {v.instruction && <p className="mt-1 text-muted-foreground">“{v.instruction}”</p>}
-                  <p className="mt-1 text-xs text-muted-foreground">{formatDate(v.created_at)}</p>
                 </li>
               ))}
             </ol>
@@ -277,6 +293,23 @@ export function MapEditor() {
   }, [dirty])
 
   const conflictsById = useMemo(() => new Map((map?.conflicts ?? []).map((c) => [c.id, c])), [map])
+  // Disagreements are numbered i., ii., … in question order; the same numeral marks the steps
+  // involved on the diagram.
+  const { disputes, pointOf } = useMemo(() => {
+    const byNode = new Map<string, number[]>()
+    const byQuestion = new Map<string, number>()
+    for (const q of map?.model.open_questions ?? []) {
+      if (!q.id.startsWith("conflict_") || !conflictsById.has(q.id.slice(9))) continue
+      const n = byQuestion.size + 1
+      byQuestion.set(q.id, n)
+      for (const nodeId of q.related_node_ids) byNode.set(nodeId, [...(byNode.get(nodeId) ?? []), n])
+    }
+    return { disputes: byNode, pointOf: byQuestion }
+  }, [map, conflictsById])
+  const canvasDisputes: Dispute[] = useMemo(
+    () => [...disputes].map(([nodeId, nums]) => ({ nodeId, label: nums.map(roman).join(" ") })),
+    [disputes],
+  )
   const focusNode = (nodeId: string) => {
     if (!canvas.current?.select(`Node_${nodeId}`) && !canvas.current?.select(nodeId))
       toast.info("That step isn't on the diagram")
@@ -286,20 +319,20 @@ export function MapEditor() {
     try {
       await api.resolveConflict(conflictId, option, await saveIfDirty())
       setMap(await api.map(mapId))
-      toast.success(option == null ? "Marked as resolved" : "Applied to the map")
+      toast.success(option == null ? "Marked as settled" : "Applied to the map")
     } catch (e) {
       failed(e as Error)
     }
   }
 
-  if (query.isPending) return <Skeleton className="m-4 h-[70svh] rounded-xl" />
+  if (query.isPending) return <Skeleton className="m-6 h-[70svh] rounded-sm bg-paper-shade" />
   if (query.error || !map) {
     return (
-      <div className="mx-auto max-w-xl p-8 text-sm">
-        <p className="font-medium">This map couldn't be opened.</p>
-        <p className="mt-1 text-muted-foreground">{query.error?.message}</p>
+      <div className="measure mx-auto p-10">
+        <p className="serif text-2xl">This map couldn't be opened.</p>
+        <p className="mt-1 text-graphite">{query.error?.message}</p>
         <Link to="/projects" className="mt-3 inline-block underline">
-          Back to projects
+          Back to the index
         </Link>
       </div>
     )
@@ -307,22 +340,20 @@ export function MapEditor() {
 
   const questions = map.model.open_questions
   return (
-    <div className="flex h-[calc(100svh-3.5rem)] flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
-        <Button asChild variant="ghost" size="icon" aria-label="Back to project">
-          <Link to={`/projects/${map.project_id}`}>
-            <ArrowLeft aria-hidden />
+    <div className="flex h-[calc(100svh-3.5rem)] flex-col bg-paper">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule px-6 py-2.5">
+        <div className="min-w-0">
+          <Link to={`/projects/${map.project_id}`} className="label inline-flex min-h-7 items-center hover:text-ink">
+            ← {map.transcript_id == null ? "Process file" : "Meeting map"}
           </Link>
-        </Button>
-        <h1 className="min-w-0 truncate text-base font-semibold">{map.model.name}</h1>
-        <Badge variant="outline">v{map.version}</Badge>
-        {map.transcript_id == null && <Badge variant="secondary">All meetings</Badge>}
-        {dirty && (
-          <span className="text-xs text-amber-700 dark:text-amber-300" role="status">
-            Unsaved changes
-          </span>
-        )}
-        <div className="ml-auto flex items-center gap-1">
+          <h1 className="truncate text-[1.6rem] leading-tight">{map.model.name}</h1>
+        </div>
+        <p className="tabular self-end pb-1 text-sm text-graphite" role="status">
+          v{map.version}
+          {map.transcript_id == null ? " · all meetings" : " · this meeting only"}
+          {dirty && <span className="text-ink"> · unsaved changes</span>}
+        </p>
+        <div className="ml-auto flex items-center gap-1.5">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -338,39 +369,39 @@ export function MapEditor() {
           </Tooltip>
           <HistorySheet mapId={mapId} version={map.version} />
           <Button variant="outline" onClick={() => undo.mutate()} disabled={!map.can_undo || undo.isPending}>
-            {undo.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <Undo2 aria-hidden />} Undo
+            {undo.isPending ? "Undoing…" : "Undo"}
           </Button>
           <ExportMenu mapId={mapId} />
           <Button onClick={() => save.mutate()} disabled={!dirty || save.isPending}>
-            {save.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <Save aria-hidden />} Save
+            {save.isPending ? "Saving…" : "Save"}
           </Button>
         </div>
       </div>
 
       {newerElsewhere && dirty && !stale && (
-        <Alert
-          className="rounded-none border-x-0 border-t-0 border-amber-500/40 bg-amber-50 dark:bg-amber-950/40"
+        <div
           role="status"
+          className="flex flex-wrap items-center gap-3 border-b border-oxblood/30 bg-oxblood-tint px-6 py-2.5 text-sm"
         >
-          <AlertTriangle aria-hidden />
-          <AlertDescription className="flex flex-wrap items-center gap-2">
-            Someone else saved v{newerElsewhere.version} while you were editing v{map.version}. Saving now would be
-            refused.
-            <Button size="sm" variant="outline" onClick={() => void downloadMine()}>
-              <Download aria-hidden /> Download my version
-            </Button>
-            <Button size="sm" onClick={() => void reloadLatest()}>
-              Reload latest
-            </Button>
-          </AlertDescription>
-        </Alert>
+          <span>
+            Someone else saved <strong>v{newerElsewhere.version}</strong> while you were editing v{map.version}. Saving
+            now would be refused.
+          </span>
+          <Button size="sm" variant="outline" onClick={() => void downloadMine()}>
+            Download my version
+          </Button>
+          <Button size="sm" onClick={() => void reloadLatest()}>
+            Reload latest
+          </Button>
+        </div>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(320px,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_400px] lg:grid-rows-1">
-        <div className="relative min-h-0 border-b lg:border-b-0 lg:border-r">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(320px,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-1">
+        <div className="relative min-h-0 border-b border-rule lg:border-r lg:border-b-0">
           <BpmnCanvas
             ref={canvas}
             xml={map.bpmn_xml}
+            disputes={canvasDisputes}
             onSelect={setSelected}
             onChange={() => {
               if (ignoreNextChange.current) ignoreNextChange.current = false
@@ -380,95 +411,115 @@ export function MapEditor() {
           />
         </div>
 
-        <aside className="flex min-h-0 flex-col" aria-label="Map details">
+        <aside className="flex min-h-0 flex-col bg-paper" aria-label="Map details">
           {map.diarization_available === false && (
-            <Alert className="m-3 mb-0">
-              <AlertTriangle aria-hidden />
-              <AlertDescription>Speakers weren't identified in a recording. Check who does each step.</AlertDescription>
-            </Alert>
+            <p className="border-b border-hairline px-6 py-3 text-sm">
+              <span className="label mr-1">Note</span> Speakers weren't identified in a recording. Check who does each
+              step.
+            </p>
           )}
-          <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
-            <TabsList className="mx-3 mt-3 grid w-auto grid-cols-3">
-              <TabsTrigger value="step">Step</TabsTrigger>
-              <TabsTrigger value="questions">Questions {questions.length > 0 && `(${questions.length})`}</TabsTrigger>
-              <TabsTrigger value="issues">Issues {map.errors.length > 0 && `(${map.errors.length})`}</TabsTrigger>
+          <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
+            <TabsList className="mx-6 mt-3 h-auto justify-start gap-5 rounded-none border-b border-hairline bg-transparent p-0">
+              {[
+                ["step", "Step", 0],
+                ["questions", "Questions", questions.length],
+                ["issues", "Issues", map.errors.length],
+              ].map(([value, label, count]) => (
+                <TabsTrigger
+                  key={value}
+                  value={String(value)}
+                  className="smallcaps -mb-px h-9 flex-none rounded-none border-0 border-b-2 border-transparent px-0 font-bold text-graphite data-[state=active]:border-ink data-[state=active]:bg-transparent data-[state=active]:text-ink"
+                >
+                  {label}
+                  {Number(count) > 0 && ` (${count})`}
+                </TabsTrigger>
+              ))}
             </TabsList>
             <ScrollArea className="min-h-0 flex-1">
-              <div className="p-3">
+              <div className="px-6 py-5">
                 <TabsContent value="step">
-                  <SelectedStep map={map} xmlId={selected} />
+                  <SelectedStep map={map} xmlId={selected} points={disputes} />
                 </TabsContent>
-                <TabsContent value="questions" className="space-y-3">
-                  {questions.length === 0 && <p className="text-sm text-muted-foreground">No open questions.</p>}
-                  {questions.map((q) => {
-                    const conflict = q.id.startsWith("conflict_") ? conflictsById.get(q.id.slice(9)) : undefined
-                    return conflict ? (
-                      <ConflictCard
-                        key={q.id}
-                        kind={conflict.kind}
-                        description={q.question
-                          .replace(/^Meetings disagree \(\w+\): /, "")
-                          .replace(/ Options: .*$/, "")}
-                        options={conflict.options}
-                        onResolve={(opt) => resolve(conflict.id, opt)}
-                        onSelect={q.related_node_ids[0] ? () => focusNode(q.related_node_ids[0]) : undefined}
-                      />
-                    ) : (
-                      <button
-                        key={q.id}
-                        type="button"
-                        disabled={!q.related_node_ids.length}
-                        onClick={() => q.related_node_ids[0] && focusNode(q.related_node_ids[0])}
-                        className="block w-full rounded-lg border p-3 text-left text-sm enabled:hover:bg-accent disabled:cursor-default"
-                      >
-                        {q.question}
-                      </button>
-                    )
-                  })}
+                <TabsContent value="questions">
+                  {questions.length === 0 && (
+                    <p className="serif text-[1.05rem] text-graphite italic">No open questions.</p>
+                  )}
+                  <div className="divide-y divide-hairline">
+                    {questions.map((q) => {
+                      const conflict = q.id.startsWith("conflict_") ? conflictsById.get(q.id.slice(9)) : undefined
+                      return conflict ? (
+                        <ConflictPoint
+                          key={q.id}
+                          number={pointOf.get(q.id) ?? 0}
+                          kind={conflict.kind}
+                          description={q.question
+                            .replace(/^Meetings disagree \(\w+\): /, "")
+                            .replace(/ Options: .*$/, "")}
+                          options={conflict.options}
+                          onResolve={(opt) => resolve(conflict.id, opt)}
+                          onSelect={q.related_node_ids[0] ? () => focusNode(q.related_node_ids[0]) : undefined}
+                        />
+                      ) : (
+                        <button
+                          key={q.id}
+                          type="button"
+                          disabled={!q.related_node_ids.length}
+                          onClick={() => q.related_node_ids[0] && focusNode(q.related_node_ids[0])}
+                          className="serif block w-full py-4 text-left text-[1.05rem] leading-snug enabled:hover:underline enabled:hover:decoration-1 enabled:hover:underline-offset-4 disabled:cursor-default"
+                        >
+                          {q.question}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </TabsContent>
-                <TabsContent value="issues" className="space-y-2">
-                  {map.errors.length === 0 && <p className="text-sm text-muted-foreground">No problems found.</p>}
-                  {map.errors.map((e, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      disabled={!e.node_ids.length}
-                      onClick={() => e.node_ids[0] && focusNode(e.node_ids[0])}
-                      className="flex w-full items-start gap-2 rounded-lg border border-destructive/30 p-3 text-left text-sm enabled:hover:bg-destructive/5"
-                    >
-                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
-                      {e.message}
-                    </button>
-                  ))}
+                <TabsContent value="issues">
+                  {map.errors.length === 0 && (
+                    <p className="serif text-[1.05rem] text-graphite italic">No structural problems found.</p>
+                  )}
+                  <ol className="divide-y divide-hairline">
+                    {map.errors.map((e, i) => (
+                      <li key={i}>
+                        <button
+                          type="button"
+                          disabled={!e.node_ids.length}
+                          onClick={() => e.node_ids[0] && focusNode(e.node_ids[0])}
+                          className="grid w-full grid-cols-[1.5rem_1fr] py-3 text-left text-sm enabled:hover:bg-paper-shade disabled:cursor-default"
+                        >
+                          <span className="tabular text-graphite">{i + 1}.</span>
+                          {e.message}
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
                 </TabsContent>
               </div>
             </ScrollArea>
           </Tabs>
 
           <form
-            className="space-y-2 border-t p-3"
+            className="space-y-2 border-t border-rule bg-sheet px-6 py-4"
             onSubmit={(e) => {
               e.preventDefault()
               if (instruction.trim() && !send.isPending) send.mutate(instruction.trim())
             }}
           >
             {chat.length > 0 && (
-              <ol className="max-h-36 space-y-1 overflow-y-auto text-sm" aria-live="polite" aria-label="Chat">
+              <ol className="max-h-36 space-y-1.5 overflow-y-auto text-sm" aria-live="polite" aria-label="Chat">
                 {chat.map((c, i) => (
                   <li
                     key={i}
                     className={
-                      c.role === "user" ? "text-muted-foreground" : c.role === "error" ? "text-destructive" : undefined
+                      c.role === "user" ? "text-graphite" : c.role === "error" ? "text-oxblood" : "serif text-[1.02rem]"
                     }
                   >
-                    {c.role === "user" ? "You: " : ""}
-                    {c.text}
+                    {c.role === "user" ? `You: ${c.text}` : c.text}
                   </li>
                 ))}
               </ol>
             )}
-            <label htmlFor="chat-input" className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-              <MessageSquare className="size-3" aria-hidden /> Describe a change
+            <label htmlFor="chat-input" className="label block">
+              Describe a change
             </label>
             <div className="flex gap-2">
               <Textarea
@@ -485,14 +536,8 @@ export function MapEditor() {
                   }
                 }}
               />
-              <Button
-                type="submit"
-                size="icon"
-                className="h-auto"
-                disabled={!instruction.trim() || send.isPending}
-                aria-label="Send"
-              >
-                {send.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <SendHorizontal aria-hidden />}
+              <Button type="submit" className="h-auto self-stretch" disabled={!instruction.trim() || send.isPending}>
+                {send.isPending ? "Applying…" : "Apply"}
               </Button>
             </div>
           </form>
@@ -500,10 +545,10 @@ export function MapEditor() {
       </div>
 
       <AlertDialog open={!!stale}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-sheet">
           <AlertDialogHeader>
-            <AlertDialogTitle>Someone else changed this map</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-2xl">Someone else changed this map</AlertDialogTitle>
+            <AlertDialogDescription className="text-graphite">
               {stale} Nothing was overwritten. Reload to continue from the latest version
               {dirty ? "; download your unsaved changes first if you want to keep them" : ""}.
             </AlertDialogDescription>
@@ -511,7 +556,7 @@ export function MapEditor() {
           <AlertDialogFooter>
             {dirty && (
               <Button variant="outline" onClick={() => void downloadMine()}>
-                <Download aria-hidden /> Download my version
+                Download my version
               </Button>
             )}
             <AlertDialogAction onClick={() => void reloadLatest()}>Reload latest</AlertDialogAction>
@@ -520,10 +565,12 @@ export function MapEditor() {
       </AlertDialog>
 
       <AlertDialog open={blocker.state === "blocked"}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-sheet">
           <AlertDialogHeader>
-            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
-            <AlertDialogDescription>Your changes to the diagram haven't been saved.</AlertDialogDescription>
+            <AlertDialogTitle className="text-2xl">Leave without saving?</AlertDialogTitle>
+            <AlertDialogDescription className="text-graphite">
+              Your changes to the diagram haven't been saved.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => blocker.reset?.()}>Stay</AlertDialogCancel>

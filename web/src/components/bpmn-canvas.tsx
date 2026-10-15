@@ -1,6 +1,7 @@
 import "bpmn-js/dist/assets/diagram-js.css"
 import "bpmn-js/dist/assets/bpmn-js.css"
 import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css" // font files, not data: URLs (CSP)
+import "./bpmn-canvas.css"
 
 import BpmnModeler from "bpmn-js/lib/Modeler"
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react"
@@ -21,11 +22,23 @@ interface CanvasService {
   viewbox(box: Viewbox): void
   zoom(level: "fit-viewport" | number): void
   scrollToElement(element: DiagramElement): void
+  addMarker(id: string, cls: string): void
+  removeMarker(id: string, cls: string): void
 }
 interface Services {
   canvas: CanvasService
   elementRegistry: { get(id: string): DiagramElement | undefined }
   selection: { select(element: DiagramElement): void }
+  overlays: {
+    add(id: string, type: string, o: { position: { top?: number; right?: number }; html: HTMLElement }): string
+    remove(filter: { type: string }): void
+  }
+}
+
+/** A step in dispute, marked on the diagram with its point numeral (e.g. "ii"). */
+export interface Dispute {
+  nodeId: string
+  label: string
 }
 
 export interface BpmnCanvasHandle {
@@ -34,32 +47,75 @@ export interface BpmnCanvasHandle {
   zoomToFit(): void
 }
 
+// MASTER "themed to match": ink on a white sheet, serif labels. Rendering only: the saved
+// XML and server-side exports keep standard BPMN styling.
+const SERIF = '"EB Garamond Variable", "EB Garamond", Georgia, serif'
+const THEME = {
+  bpmnRenderer: { defaultFillColor: "#ffffff", defaultStrokeColor: "#1a1a1a", defaultLabelColor: "#1a1a1a" },
+  textRenderer: {
+    defaultStyle: { fontFamily: SERIF, fontSize: 14, fontWeight: 500, lineHeight: 1.15 },
+    externalStyle: { fontFamily: SERIF, fontSize: 13, fontWeight: 500, lineHeight: 1.15 },
+  },
+}
+const DISPUTED = "t2b-disputed"
+
+// Labels are measured when drawn, so draw only once the serif has actually loaded.
+const fontReady: Promise<unknown> = document.fonts
+  ? document.fonts.load(`500 14px ${SERIF}`).catch(() => undefined)
+  : Promise.resolve()
+
 export const BpmnCanvas = forwardRef<
   BpmnCanvasHandle,
   {
     xml: string
+    disputes?: Dispute[]
     onSelect: (xmlId: string | null) => void
     onChange: () => void
     onImportError: (message: string) => void
   }
->(function BpmnCanvas({ xml, onSelect, onChange, onImportError }, ref) {
+>(function BpmnCanvas({ xml, disputes, onSelect, onChange, onImportError }, ref) {
   const container = useRef<HTMLDivElement>(null)
   const modeler = useRef<BpmnModeler | null>(null)
-  const callbacks = useRef({ onSelect, onChange, onImportError })
+  const latest = useRef({ onSelect, onChange, onImportError, disputes: disputes ?? [] })
   useLayoutEffect(() => {
-    callbacks.current = { onSelect, onChange, onImportError } // latest handlers for bpmn-js events
+    latest.current = { onSelect, onChange, onImportError, disputes: disputes ?? [] } // for bpmn-js callbacks
   })
   const imported = useRef(false)
+  const marked = useRef<string[]>([])
 
   const svc = <K extends keyof Services>(name: K): Services[K] => modeler.current!.get(name) as Services[K]
 
+  /** Oxblood outline + numeral on each disputed step (MASTER: the same numeral as the list). */
+  const markDisputes = () => {
+    if (!modeler.current || !imported.current) return
+    const canvas = svc("canvas")
+    for (const id of marked.current) canvas.removeMarker(id, DISPUTED)
+    svc("overlays").remove({ type: DISPUTED })
+    marked.current = []
+    for (const d of latest.current.disputes) {
+      const el = svc("elementRegistry").get(`Node_${d.nodeId}`) ?? svc("elementRegistry").get(d.nodeId)
+      if (!el) continue
+      canvas.addMarker(el.id, DISPUTED)
+      const mark = document.createElement("span")
+      mark.className = "t2b-dispute-mark"
+      mark.textContent = d.label
+      mark.title = `In dispute: point ${d.label}`
+      svc("overlays").add(el.id, DISPUTED, { position: { top: -11, right: 12 }, html: mark })
+      marked.current.push(el.id)
+    }
+  }
+  const markRef = useRef(markDisputes)
+  useLayoutEffect(() => {
+    markRef.current = markDisputes
+  })
+
   useEffect(() => {
-    const m = new BpmnModeler({ container: container.current! }) // keyboard shortcuts bind to the canvas itself
+    const m = new BpmnModeler({ container: container.current!, ...THEME }) // keyboard binds to the canvas
     modeler.current = m
     m.on("selection.changed", (e: { newSelection: DiagramElement[] }) =>
-      callbacks.current.onSelect(e.newSelection.length === 1 ? e.newSelection[0].id : null),
+      latest.current.onSelect(e.newSelection.length === 1 ? e.newSelection[0].id : null),
     )
-    m.on("commandStack.changed", () => callbacks.current.onChange())
+    m.on("commandStack.changed", () => latest.current.onChange())
     return () => {
       m.destroy()
       modeler.current = null
@@ -68,23 +124,30 @@ export const BpmnCanvas = forwardRef<
   }, [])
 
   useEffect(() => {
-    const m = modeler.current
-    if (!m) return
     let cancelled = false
     const keepView = imported.current ? svc("canvas").viewbox() : null
-    m.importXML(xml)
-      .then(({ warnings }) => {
-        if (cancelled) return
-        if (warnings.length) console.warn("bpmn-js import warnings", warnings)
-        if (keepView) svc("canvas").viewbox(keepView)
-        else svc("canvas").zoom("fit-viewport")
-        imported.current = true
-      })
-      .catch((e: Error) => !cancelled && callbacks.current.onImportError(e.message))
+    void fontReady.then(() => {
+      const m = modeler.current
+      if (!m || cancelled) return
+      m.importXML(xml)
+        .then(({ warnings }) => {
+          if (cancelled) return
+          if (warnings.length) console.warn("bpmn-js import warnings", warnings)
+          if (keepView) svc("canvas").viewbox(keepView)
+          else svc("canvas").zoom("fit-viewport")
+          imported.current = true
+          markRef.current()
+        })
+        .catch((e: Error) => !cancelled && latest.current.onImportError(e.message))
+    })
     return () => {
       cancelled = true
     }
   }, [xml])
+
+  // Re-mark when the set of disputed steps changes (a point was settled, a meeting merged).
+  const disputeKey = (disputes ?? []).map((d) => `${d.nodeId}:${d.label}`).join("|")
+  useEffect(() => markRef.current(), [disputeKey])
 
   useImperativeHandle(ref, () => ({
     async saveXML() {
@@ -107,7 +170,7 @@ export const BpmnCanvas = forwardRef<
   return (
     <div
       ref={container}
-      className="bpmn-canvas h-full w-full bg-white text-neutral-900"
+      className="bpmn-canvas h-full w-full"
       role="application"
       aria-label="BPMN diagram editor. Use the palette on the left to add elements."
     />
