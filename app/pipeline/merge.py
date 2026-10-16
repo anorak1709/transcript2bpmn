@@ -19,6 +19,7 @@ node carries every transcript and segment it came from.
 """
 
 import math
+import re
 import uuid
 from collections import defaultdict
 from collections.abc import Callable
@@ -340,6 +341,21 @@ class CannotApply(ValueError):
     """The chosen option needs a judgement call; the user edits the map, then marks it resolved."""
 
 
+_VALUE = re.compile(r"[$€£]?\d[\d,]*(?:\.\d+)?%?")
+
+
+def _carry_values(name: str, old: str, new: str) -> str:
+    """Swap the old condition's figures for the new one's where the decision's name quotes them.
+    Pairs figures by position and only when both conditions have the same number of them."""
+    before, after = _VALUE.findall(old), _VALUE.findall(new)
+    if len(before) != len(after):
+        return name
+    for a, b in zip(before, after, strict=True):
+        if a != b:
+            name = re.sub(rf"(?<![\d$€£]){re.escape(a)}(?![\d,.])", b, name)
+    return name
+
+
 def resolution_ops(
     kind: str, node_ids: list[str], options: list[str], choice: int, model: ProcessModel
 ) -> list[edit.AnyOp]:
@@ -366,7 +382,13 @@ def resolution_ops(
 
     if kind == "condition":
         u, v = node_ids
-        return [edit.SetCondition(op="set_condition", source_id=u, target_id=v, condition=options[choice])]
+        new = options[choice]
+        ops = [edit.SetCondition(op="set_condition", source_id=u, target_id=v, condition=new)]
+        old = next((f.condition for f in model.flows if (f.source_id, f.target_id) == (u, v)), None) or ""
+        renamed = _carry_values(nodes[u].name, old, new)
+        if renamed != nodes[u].name:  # "Amount over $5,000?" must follow its branches to $10,000
+            ops.append(edit.RenameNode(op="rename_node", node_id=u, name=renamed))
+        return ops
 
     if kind == "sequence":
         n, *targets = node_ids

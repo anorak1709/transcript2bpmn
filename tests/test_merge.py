@@ -147,6 +147,12 @@ def test_resolve_owner_condition_sequence() -> None:
 
     cond = _apply("condition", ["g_amount", "t_fin_approve"], ["Over $5,000", "Over $10,000"], 1, m)
     assert next(f.condition for f in cond.flows if f.target_id == "t_fin_approve") == "Over $10,000"
+    assert next(n.name for n in cond.nodes if n.id == "g_amount") == "Amount over $10,000?"  # name follows
+    # the sibling branch's point then finds the name already updated: no second rename
+    both = _apply("condition", ["g_amount", "t_ap_approve"], ["$5,000 or less", "$10,000 or less"], 1, cond)
+    assert next(n.name for n in both.nodes if n.id == "g_amount") == "Amount over $10,000?"
+    keep = _apply("condition", ["g_amount", "t_fin_approve"], ["Over $5,000", "Over $10,000"], 0, m)
+    assert next(n.name for n in keep.nodes if n.id == "g_amount") == "Amount over $5,000?"
 
     branched = apply_ops(
         m, edit_ops({"op": "connect", "source_id": "t_enter", "target_id": "t_pay", "condition": None})
