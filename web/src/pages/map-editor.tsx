@@ -26,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, downloadText, isStale } from "@/lib/api"
 import { formatDate, formatTimestamp, roman } from "@/lib/format"
-import type { ProcessMap, ProcessNode } from "@/lib/types"
+import type { ProcessMap, ProcessNode, Resolution } from "@/lib/types"
 import { ExportMenu } from "@/pages/project"
 
 /** Our exports use `Node_<id>`; elements created in the editor keep their bpmn-js id. */
@@ -293,6 +293,13 @@ export function MapEditor() {
   }, [dirty])
 
   const conflictsById = useMemo(() => new Map((map?.conflicts ?? []).map((c) => [c.id, c])), [map])
+  // Who said what on each side (the map payload only carries ids and options).
+  const fullConflicts = useQuery({
+    queryKey: ["conflicts", map?.project_id, "open-meeting", map?.version],
+    queryFn: () => api.conflicts(map!.project_id, { status: "open", origin: "meeting" }),
+    enabled: !!map && !map.transcript_id,
+  })
+  const evidence = useMemo(() => new Map((fullConflicts.data ?? []).map((c) => [c.id, c])), [fullConflicts.data])
   // Disagreements are numbered i., ii., … in question order; the same numeral marks the steps
   // involved on the diagram.
   const { disputes, pointOf } = useMemo(() => {
@@ -315,11 +322,11 @@ export function MapEditor() {
       toast.info("That step isn't on the diagram")
     else setTab("step")
   }
-  const resolve = async (conflictId: string, option: number | null) => {
+  const resolve = async (conflictId: string, how: Resolution) => {
     try {
-      await api.resolveConflict(conflictId, option, await saveIfDirty())
+      await api.resolveConflict(conflictId, how, await saveIfDirty())
       setMap(await api.map(mapId))
-      toast.success(option == null ? "Marked as settled" : "Applied to the map")
+      toast.success("option" in how || "variant" in how ? "Applied to the map" : "Marked as settled")
     } catch (e) {
       failed(e as Error)
     }
@@ -451,12 +458,15 @@ export function MapEditor() {
                         <ConflictPoint
                           key={q.id}
                           number={pointOf.get(q.id) ?? 0}
-                          kind={conflict.kind}
-                          description={q.question
-                            .replace(/^Meetings disagree \(\w+\): /, "")
-                            .replace(/ Options: .*$/, "")}
-                          options={conflict.options}
-                          onResolve={(opt) => resolve(conflict.id, opt)}
+                          conflict={
+                            evidence.get(conflict.id) ?? {
+                              ...conflict,
+                              description: q.question
+                                .replace(/^Meetings disagree \(\w+\): /, "")
+                                .replace(/ Options: .*$/, ""),
+                            }
+                          }
+                          onResolve={(how) => resolve(conflict.id, how)}
                           onSelect={q.related_node_ids[0] ? () => focusNode(q.related_node_ids[0]) : undefined}
                         />
                       ) : (

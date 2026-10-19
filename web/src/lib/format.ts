@@ -26,6 +26,7 @@ export const STATUS_LABEL: Record<JobStatus, string> = {
   extracting: "Extracting process",
   converting: "Building diagram",
   merging: "Merging into project map",
+  comparing: "Comparing with the map",
   done: "Done",
   failed: "Failed",
 }
@@ -75,3 +76,5 @@ export function formatDay(iso: string | null | undefined): string {
   if (!iso) return ""
   return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
 }
+
+export const ROLE_LABEL = { owner: "process owner", performer: "does the work", observer: "observer" } as const

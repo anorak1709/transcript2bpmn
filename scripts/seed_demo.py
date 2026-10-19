@@ -29,6 +29,8 @@ CASES = [
     ("Supplier invoice approval", ROOT / "eval/gold_merge/01_invoice_two_meetings", 30),
     ("New employee onboarding", ROOT / "eval/gold_merge/02_onboarding_order_conflict", None),
 ]
+# Speaker roles to tag, so disagreements show who backs which side.
+ROLES = {"Supplier invoice approval": {"Marco": "owner", "Priya": "performer", "Sana": "performer"}}
 
 
 def main() -> None:
@@ -60,9 +62,30 @@ def main() -> None:
                 job_id = job.id
             model = ProcessModel.model_validate_json((case / f"model_{k}.json").read_text())
             run_job(job_id, FakeLLM(model))
+        if (case / "policy.txt").exists():  # the written policy, to compare the map against
+            doc = case / "policy.txt"
+            t = (
+                http.post(
+                    f"/projects/{project['id']}/transcripts?purpose=policy",
+                    files={"file": ("invoice-policy.txt", doc.read_bytes())},
+                )
+                .raise_for_status()
+                .json()
+            )
+            with tenant_session(org.id) as db:
+                job = Job(transcript_id=t["id"], status="queued")
+                db.add(job)
+                db.commit()
+                job_id = job.id
+            run_job(job_id, FakeLLM(ProcessModel.model_validate_json((case / "policy_model.json").read_text())))
+        for speaker, role in ROLES.get(name, {}).items():
+            http.put(f"/projects/{project['id']}/speakers/{speaker}", json={"role": role}).raise_for_status()
         p = http.get(f"/projects/{project['id']}").raise_for_status().json()
         statuses = [x["latest_job"]["status"] for x in p["transcripts"]]
-        print(f"  {name}: meetings {statuses}, {p['open_conflicts']} disagreement(s) to review")
+        print(
+            f"  {name}: files {statuses}, {p['open_conflicts']} disagreement(s), "
+            f"{p['open_policy_differences']} policy difference(s) to review"
+        )
 
     print(f"\norganization: {org.id}\napi key (shown once): {key}\nopen: {args.api}/app/")
 

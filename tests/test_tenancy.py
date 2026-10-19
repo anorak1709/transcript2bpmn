@@ -27,6 +27,7 @@ PUBLIC = {
     "/docs",
     "/docs/oauth2-redirect",
     "/redoc",
+    "/review/{token}",  # a stakeholder's sign-off link: the token is the credential (tests/test_insights.py)
 }
 
 
@@ -46,6 +47,9 @@ def victim(tenant: TenantCtx) -> dict[str, str]:
         tmap = db.scalars(select(ProcessMap).where(ProcessMap.transcript_id.is_not(None))).first()
         assert conflict and tmap
         job = tenant.client.post(f"/transcripts/{ctx['transcripts'][0]}/process").json()
+        lane = db.get_one(ProcessMap, ctx["merged_map_id"]).model["lanes"][0]["id"]
+    signoff = tenant.client.post(f"/projects/{tenant.project_id}/signoffs", json={"name": "Ann", "lane_ids": [lane]})
+    gap = tenant.client.get(f"/projects/{tenant.project_id}/gaps").json()[0]
     return {
         "project_id": tenant.project_id,
         "transcript_id": ctx["transcripts"][0],
@@ -56,6 +60,9 @@ def victim(tenant: TenantCtx) -> dict[str, str]:
         "org_id": tenant.org_id,
         "fmt": "md",  # exports: another org must not get an SOP (or any format) of this map
         "key_id": tenant.client.get("/keys").json()[0]["id"],  # can't see or revoke another org's key
+        "name": "Priya",  # a speaker in A's meetings: B can't tag them
+        "gap_id": gap["id"],
+        "signoff_id": signoff.json()["id"],
     }
 
 
@@ -69,6 +76,10 @@ def _call(client: Any, method: str, path: str) -> Any:
         kw["files"] = {"file": ("t.txt", b"Ann: hi")}
     elif path == "/projects" and method == "POST":
         kw["json"] = {"name": "x"}
+    elif "/speakers/" in path:
+        kw["json"] = {"role": "owner"}
+    elif path.endswith("/signoffs") and method == "POST":
+        kw["json"] = {"name": "x", "lane_ids": ["lane_ap"]}
     return client.request(method, path, **kw)
 
 

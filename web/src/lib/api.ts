@@ -3,10 +3,16 @@ import type {
   AuditEntry,
   ChatResult,
   Conflict,
+  Gap,
   Job,
   MapVersion,
   ProcessMap,
   Project,
+  Resolution,
+  Review,
+  Signoff,
+  Speaker,
+  SpeakerRole,
   Transcript,
   Usage,
 } from "@/lib/types"
@@ -97,17 +103,33 @@ export const api = {
     request<Project>("POST", "/projects", json({ name, retention_days: retentionDays }), "application/json"),
   deleteProject: (id: string) => request<Record<string, number>>("DELETE", `/projects/${id}`),
 
-  upload: (projectId: string, file: File) => {
+  upload: (projectId: string, file: File, purpose: "meeting" | "policy" = "meeting") => {
     const form = new FormData()
     form.append("file", file)
-    return request<Transcript>("POST", `/projects/${projectId}/transcripts`, form)
+    return request<Transcript>("POST", `/projects/${projectId}/transcripts?purpose=${purpose}`, form)
   },
   process: (transcriptId: string) => request<Job>("POST", `/transcripts/${transcriptId}/process`),
 
-  conflicts: (projectId: string, status?: "open" | "resolved") =>
-    request<Conflict[]>("GET", `/projects/${projectId}/conflicts${status ? `?status=${status}` : ""}`),
-  resolveConflict: (id: string, option: number | null, mapVersion?: number) =>
-    request<Conflict>("POST", `/conflicts/${id}/resolve`, json({ option }), "application/json", mapVersion),
+  conflicts: (projectId: string, filter: { status?: "open" | "resolved"; origin?: "meeting" | "policy" } = {}) =>
+    request<Conflict[]>("GET", `/projects/${projectId}/conflicts?${new URLSearchParams(filter)}`),
+  resolveConflict: (id: string, how: Resolution, mapVersion?: number) =>
+    request<Conflict>("POST", `/conflicts/${id}/resolve`, json(how), "application/json", mapVersion),
+
+  speakers: (projectId: string) => request<Speaker[]>("GET", `/projects/${projectId}/speakers`),
+  setSpeakerRole: (projectId: string, name: string, role: SpeakerRole | null) =>
+    request<Speaker>(
+      "PUT",
+      `/projects/${projectId}/speakers/${encodeURIComponent(name)}`,
+      json({ role }),
+      "application/json",
+    ),
+  gaps: (projectId: string) => request<Gap[]>("GET", `/projects/${projectId}/gaps`),
+  dismissGap: (projectId: string, gapId: string) => request("POST", `/projects/${projectId}/gaps/${gapId}/dismiss`),
+
+  signoffs: (projectId: string) => request<Signoff[]>("GET", `/projects/${projectId}/signoffs`),
+  requestSignoff: (projectId: string, name: string, laneIds: string[]) =>
+    request<Signoff>("POST", `/projects/${projectId}/signoffs`, json({ name, lane_ids: laneIds }), "application/json"),
+  revokeSignoff: (id: string) => request<Signoff>("DELETE", `/signoffs/${id}`),
 
   map: (id: string) => request<ProcessMap>("GET", `/maps/${id}`),
   chat: (id: string, instruction: string, version: number) =>
@@ -124,16 +146,25 @@ export const api = {
 }
 
 /** Download an export with the API key attached (a plain link can't send the header). */
-export async function downloadExport(mapId: string, format: "bpmn" | "svg" | "png" | "md"): Promise<void> {
+export function downloadExport(mapId: string, format: "bpmn" | "svg" | "png" | "md"): Promise<void> {
+  return download(`/maps/${mapId}/export/${format}`, `process.${format}`)
+}
+
+/** The next meeting's agenda (Markdown). */
+export function downloadAgenda(projectId: string): Promise<void> {
+  return download(`/projects/${projectId}/agenda`, "agenda.md")
+}
+
+async function download(path: string, fallback: string): Promise<void> {
   const key = getApiKey()
-  const res = await fetch(`/maps/${mapId}/export/${format}`, {
+  const res = await fetch(path, {
     headers: key ? { Authorization: `Bearer ${key}` } : {},
   })
   if (!res.ok) {
     const data = await res.json().catch(() => null)
     throw new ApiError(res.status, detail(data, res.status))
   }
-  const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? `process.${format}`
+  const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? fallback
   const url = URL.createObjectURL(await res.blob())
   const a = document.createElement("a")
   a.href = url
@@ -153,4 +184,25 @@ export function downloadText(text: string, filename: string, type = "application
   a.download = filename
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/** Reviewer side of a sign-off link: no API key (the token is the credential), and a 401/410
+ *  must never sign the owner out of their own browser. */
+async function reviewRequest<T>(token: string, body?: unknown): Promise<T> {
+  const res = await fetch(`/review/${encodeURIComponent(token)}`, {
+    method: body ? "POST" : "GET",
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(res.status, detail(data, res.status))
+  }
+  return (await res.json()) as T
+}
+
+export const review = {
+  get: (token: string) => reviewRequest<Review>(token),
+  decide: (token: string, decision: "approved" | "changes_requested", comment: string) =>
+    reviewRequest<Review>(token, { decision, comment }),
 }

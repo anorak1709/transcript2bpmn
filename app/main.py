@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 
-from app.api import health, keys, maps, projects
+from app.api import health, keys, maps, projects, signoffs
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.metrics import metrics_middleware, metrics_router
@@ -39,6 +39,8 @@ app.include_router(health.router)
 app.include_router(projects.router)
 app.include_router(maps.router)
 app.include_router(keys.router)
+app.include_router(signoffs.router)
+app.include_router(signoffs.public)
 app.include_router(metrics_router)
 app.middleware("http")(metrics_middleware)
 

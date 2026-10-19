@@ -1,0 +1,240 @@
+{
+  "name": "Supplier invoice approval",
+  "lanes": [
+    {
+      "id": "lane_ap",
+      "name": "Accounts Payable"
+    },
+    {
+      "id": "lane_fin",
+      "name": "Finance"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start_event",
+      "name": "Invoice received",
+      "lane_id": "lane_ap",
+      "source_segment_ids": [
+        "s1"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "t_enter",
+      "type": "user_task",
+      "name": "Enter invoice into ERP",
+      "lane_id": "lane_ap",
+      "source_segment_ids": [
+        "s1"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "t_match",
+      "type": "user_task",
+      "name": "Match invoice to purchase order",
+      "lane_id": "lane_ap",
+      "source_segment_ids": [
+        "s1"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "g_match",
+      "type": "exclusive_gateway",
+      "name": "Invoice matches PO?",
+      "lane_id": "lane_ap",
+      "source_segment_ids": [
+        "s1"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "t_return",
+      "type": "user_task",
+      "name": "Return invoice to supplier",
+      "lane_id": "lane_ap",
+      "source_segment_ids": [
+        "s1"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "end_returned",
+      "type": "end_event",
+      "name": "Invoice returned",
+      "lane_id": "lane_ap",
+      "source_segment_ids": [
+        "s1"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "g_amount",
+      "type": "exclusive_gateway",
+      "name": "Amount over $5,000?",
+      "lane_id": "lane_ap",
+      "source_segment_ids": [
+        "s2",
+        "s3"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "t_fin_approve",
+      "type": "user_task",
+      "name": "Approve invoice (finance)",
+      "lane_id": "lane_fin",
+      "source_segment_ids": [
+        "s2"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "t_ap_approve",
+      "type": "user_task",
+      "name": "Approve invoice (AP)",
+      "lane_id": "lane_ap",
+      "source_segment_ids": [
+        "s3"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "g_join",
+      "type": "exclusive_gateway",
+      "name": "",
+      "lane_id": "lane_fin",
+      "source_segment_ids": [
+        "s4"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "t_pay",
+      "type": "service_task",
+      "name": "Pay supplier in weekly payment run",
+      "lane_id": "lane_fin",
+      "source_segment_ids": [
+        "s4"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "end_paid",
+      "type": "end_event",
+      "name": "Invoice paid",
+      "lane_id": "lane_fin",
+      "source_segment_ids": [
+        "s4"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    },
+    {
+      "id": "t_vat",
+      "type": "user_task",
+      "name": "Check supplier VAT number",
+      "lane_id": "lane_fin",
+      "source_segment_ids": [
+        "s4"
+      ],
+      "confidence": 1.0,
+      "user_added": false
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "source_id": "start",
+      "target_id": "t_enter",
+      "condition": null
+    },
+    {
+      "id": "f2",
+      "source_id": "t_enter",
+      "target_id": "t_match",
+      "condition": null
+    },
+    {
+      "id": "f3",
+      "source_id": "t_match",
+      "target_id": "g_match",
+      "condition": null
+    },
+    {
+      "id": "f4",
+      "source_id": "g_match",
+      "target_id": "t_return",
+      "condition": "No match"
+    },
+    {
+      "id": "f5",
+      "source_id": "t_return",
+      "target_id": "end_returned",
+      "condition": null
+    },
+    {
+      "id": "f6",
+      "source_id": "g_match",
+      "target_id": "g_amount",
+      "condition": "Matches"
+    },
+    {
+      "id": "f7",
+      "source_id": "g_amount",
+      "target_id": "t_fin_approve",
+      "condition": "Over $10,000"
+    },
+    {
+      "id": "f8",
+      "source_id": "g_amount",
+      "target_id": "t_ap_approve",
+      "condition": "$10,000 or less"
+    },
+    {
+      "id": "f9",
+      "source_id": "t_fin_approve",
+      "target_id": "g_join",
+      "condition": null
+    },
+    {
+      "id": "f10",
+      "source_id": "t_ap_approve",
+      "target_id": "g_join",
+      "condition": null
+    },
+    {
+      "id": "f11",
+      "source_id": "g_join",
+      "target_id": "t_vat",
+      "condition": null
+    },
+    {
+      "id": "f12",
+      "source_id": "t_pay",
+      "target_id": "end_paid",
+      "condition": null
+    },
+    {
+      "id": "f_vat",
+      "source_id": "t_vat",
+      "target_id": "t_pay",
+      "condition": null
+    }
+  ],
+  "open_questions": []
+}

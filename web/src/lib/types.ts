@@ -1,7 +1,7 @@
 // Mirrors of the API's response models (app/api/*.py). Keep in sync when those change.
 
 export type JobStatus =
-  "queued" | "transcribing" | "normalizing" | "extracting" | "converting" | "merging" | "done" | "failed"
+  "queued" | "transcribing" | "normalizing" | "extracting" | "converting" | "merging" | "comparing" | "done" | "failed"
 
 export interface Job {
   id: string
@@ -15,6 +15,7 @@ export interface Transcript {
   id: string
   project_id: string
   filename: string
+  purpose: "meeting" | "policy"
   segment_count: number | null
   duration_seconds: number | null
   content_expired: boolean
@@ -30,20 +31,104 @@ export interface Project {
   map_version: number | null
   revised_at: string | null
   open_conflicts: number
+  open_policy_differences: number
   transcripts: Transcript[]
 }
 
-export type ConflictKind = "owner" | "order" | "condition" | "sequence"
+export type ConflictKind = "owner" | "order" | "condition" | "sequence" | "missing_step" | "unofficial_step"
+export type SpeakerRole = "owner" | "performer" | "observer"
+
+export interface Quote {
+  text: string | null // null: deleted by the retention policy
+  speaker: string | null
+  role: SpeakerRole | null
+  meeting: string
+  start_ts: number | null
+  policy: boolean
+}
+
+export interface Side {
+  label: string
+  quotes: Quote[]
+}
 
 export interface Conflict {
   id: string
+  origin: "meeting" | "policy"
   kind: ConflictKind
   description: string
   options: string[]
   node_ids: string[]
   sources: { from: string; segment_ids: string[] }[]
+  sides: Side[]
+  owner_side: number | null // the side the process owner backs, if only one does
   status: "open" | "resolved"
   resolution: string | null
+}
+
+/** How to settle: pick an option, keep both as variants, note a policy deviation, or (empty)
+ *  "I fixed it myself". */
+export type Resolution =
+  | { option: number }
+  | { variant: { question: string; labels: string[] } }
+  | { note: "deviation" | "dismissed" }
+  | Record<string, never>
+
+export interface Speaker {
+  name: string
+  role: SpeakerRole | null
+  lines: number
+  meetings: number
+}
+
+export interface Gap {
+  id: string
+  kind: "one_outcome" | "no_owner" | "dead_end" | "no_trigger" | "no_exception"
+  node_ids: string[]
+  description: string
+  question: string
+}
+
+export type SignoffStatus = "pending" | "approved" | "changes_requested" | "revoked" | "expired"
+
+export interface Signoff {
+  id: string
+  name: string
+  lanes: string[]
+  lane_ids: string[]
+  status: SignoffStatus
+  comment: string | null
+  requested_version: number
+  decided_version: number | null
+  current_version: number | null
+  created_at: string | null
+  decided_at: string | null
+  expires_at: string
+  token: string | null // only right after creating it
+}
+
+export interface ReviewStep {
+  id: string
+  kind: "task" | "decision"
+  name: string
+  lane: string
+  comes_from: { name: string; lane: string; condition: string | null }[]
+  goes_to: { name: string; lane: string; condition: string | null }[]
+  quotes: Quote[]
+}
+
+export interface Review {
+  process: string
+  name: string
+  lanes: string[]
+  version: number
+  requested_version: number
+  steps: ReviewStep[]
+  decision: "approved" | "changes_requested" | null
+  comment: string | null
+  decided_version: number | null
+  decided_at: string | null
+  expires_at: string
 }
 
 export type NodeType =
@@ -145,6 +230,7 @@ export const ACTIVE_STATUSES: JobStatus[] = [
   "extracting",
   "converting",
   "merging",
+  "comparing",
 ]
 
 export const isActive = (job: Job | null) => !!job && ACTIVE_STATUSES.includes(job.status)

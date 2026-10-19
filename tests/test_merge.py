@@ -168,7 +168,6 @@ def test_resolve_owner_condition_sequence() -> None:
 
 def test_resolve_order_swaps_adjacent_steps_only() -> None:
     from app.pipeline.merge import CannotApply, resolution_ops
-    from app.pipeline.validate import validate
 
     m = gold_model("01_invoice_approval")  # start -> t_enter -> t_match -> g_match ...
     swapped = _apply("order", ["t_match", "t_enter"], ["'Enter' first", "'Match' first"], 1, m)
@@ -193,3 +192,45 @@ def test_condition_wording_alone_is_not_a_disagreement() -> None:
 
     assert _same_condition("Matches", "Matches PO") and _same_condition("Yes", "yes")
     assert not _same_condition("Over $5,000", "Over $10,000")
+
+
+def test_variant_keeps_both_versions_as_a_labelled_decision() -> None:
+    from app.pipeline.convert import validate_xsd
+    from app.pipeline.merge import CannotApply, variant_ops
+    from app.pipeline.run import model_to_bpmn
+
+    m = gold_model("01_invoice_approval")
+
+    def check(mm: ProcessModel) -> None:
+        assert validate(mm) == []
+        validate_xsd(model_to_bpmn(mm).encode())
+
+    # Who pays differs by region: one decision, both versions, rejoining before the end.
+    owner = apply_ops(
+        m, variant_ops("owner", ["t_pay"], ["Finance", "Treasury"], "Which region?", ["North", "South"], m)
+    )
+    check(owner)
+    gate = next(n for n in owner.nodes if n.name == "Which region?")
+    branches = {f.condition: f.target_id for f in owner.flows if f.source_id == gate.id}
+    lane = {n.id: n.lane_id for n in owner.nodes}
+    lanes = {x.id: x.name for x in owner.lanes}
+    assert {k: lanes[lane[v]] for k, v in branches.items()} == {"North": "Finance", "South": "Treasury"}
+    twin = next(n for n in owner.nodes if n.id == branches["South"])
+    assert twin.name == "Pay supplier in weekly payment run" and twin.source_segment_ids  # keeps its evidence
+
+    # A threshold that differs by supplier size: the second decision carries its own figures.
+    cond = apply_ops(
+        m,
+        variant_ops(
+            "condition", ["g_amount", "t_fin_approve"], ["Over $5,000", "Over $10,000"],
+            "Supplier size?", ["Small", "Large"], m,
+        ),
+    )  # fmt: skip
+    check(cond)
+    big = next(n for n in cond.nodes if n.name == "Amount over $10,000?")
+    assert sorted(f.condition or "" for f in cond.flows if f.source_id == big.id) == ["$10,000 or less", "Over $10,000"]
+
+    with pytest.raises(CannotApply):
+        variant_ops("order", ["t_pay", "t_fin_approve"], ["a", "b"], "Q?", ["x", "y"], m)
+    with pytest.raises(CannotApply, match="different label"):
+        variant_ops("owner", ["t_pay"], ["Finance", "Treasury"], "Which region?", ["North", "North"], m)

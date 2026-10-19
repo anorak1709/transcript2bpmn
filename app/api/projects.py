@@ -2,15 +2,16 @@ import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import maps, storage
+from app import insights, maps, storage
+from app.agenda import build_agenda
 from app.audit import audit
 from app.auth import DB, CurrentPrincipal
 from app.core.config import get_settings
@@ -18,7 +19,8 @@ from app.db.models import AuditLog, Conflict, Job, MapVersion, Organization, Pro
 from app.models.process import ProcessModel
 from app.pipeline import ingest
 from app.pipeline.edit import AnyOp, ResolveOpenQuestion, apply_ops
-from app.pipeline.merge import CannotApply, resolution_ops
+from app.pipeline.gaps import Gap, find_gaps
+from app.pipeline.merge import CannotApply, resolution_ops, variant_ops
 from app.pipeline.transcribe import AUDIO_EXTENSIONS, audio
 from app.projects import delete_project
 from app.ratelimit import check_quota, jobs_this_month, rate_limit
@@ -47,6 +49,7 @@ class TranscriptOut(BaseModel):
     id: str
     project_id: str
     filename: str
+    purpose: str = "meeting"  # meeting | policy
     segment_count: int | None  # text uploads
     duration_seconds: float | None  # audio uploads
     content_expired: bool = False
@@ -61,19 +64,56 @@ class ProjectOut(BaseModel):
     merged_map_id: str | None
     map_version: int | None  # merged map's current version (for the "revised … · vN" line)
     revised_at: datetime | None  # when the merged map last changed
-    open_conflicts: int
+    open_conflicts: int  # meetings disagreeing with each other
+    open_policy_differences: int
     transcripts: list[TranscriptOut]
+
+
+class QuoteOut(BaseModel):
+    text: str | None  # None: deleted by the retention policy
+    speaker: str | None
+    role: str | None
+    meeting: str
+    start_ts: float | None
+    policy: bool
+
+
+class SideOut(BaseModel):
+    label: str
+    quotes: list[QuoteOut]
 
 
 class ConflictOut(BaseModel):
     id: str
+    origin: str  # meeting | policy
     kind: str
     description: str
     options: list[str]
     node_ids: list[str]
     sources: list[dict[str, Any]]
+    sides: list[SideOut] = []  # who said what, per side
+    owner_side: int | None = None  # the side the process owner backs, if only one does
     status: str
     resolution: str | None
+
+
+class SpeakerOut(BaseModel):
+    name: str
+    role: str | None
+    lines: int
+    meetings: int
+
+
+class SpeakerRoleIn(BaseModel):
+    role: Literal["owner", "performer", "observer"] | None
+
+
+class GapOut(BaseModel):
+    id: str
+    kind: str
+    node_ids: list[str]
+    description: str
+    question: str
 
 
 class AuditOut(BaseModel):
@@ -97,6 +137,7 @@ def _transcript_out(t: Transcript, duration: float | None = None, job: Job | Non
         id=t.id,
         project_id=t.project_id,
         filename=t.filename,
+        purpose=t.purpose,
         segment_count=len(t.segments) if t.segments else None,
         duration_seconds=duration,
         content_expired=t.content_expired_at is not None,
@@ -131,7 +172,9 @@ def get_project(project_id: str, db: DB) -> ProjectOut:
         select(Job).where(Job.transcript_id.in_([t.id for t in transcripts])).order_by(Job.created_at)
     ):
         latest[job.transcript_id] = job  # ordered by time: the last one wins
-    open_conflicts = db.scalars(select(Conflict.id).where(Conflict.project_id == p.id, Conflict.status == "open")).all()
+    open_by_origin = db.scalars(
+        select(Conflict.origin).where(Conflict.project_id == p.id, Conflict.status == "open")
+    ).all()
     merged = db.get(ProcessMap, p.merged_map_id) if p.merged_map_id else None
     revised = (
         db.scalar(
@@ -149,7 +192,8 @@ def get_project(project_id: str, db: DB) -> ProjectOut:
         merged_map_id=p.merged_map_id,
         map_version=merged.current_version if merged else None,
         revised_at=revised,
-        open_conflicts=len(open_conflicts),
+        open_conflicts=open_by_origin.count("meeting"),
+        open_policy_differences=open_by_origin.count("policy"),
         transcripts=[_transcript_out(t, job=latest.get(t.id)) for t in transcripts],
     )
 
@@ -162,10 +206,16 @@ def remove_project(project_id: str, db: DB) -> dict[str, int]:
 
 
 @router.post("/projects/{project_id}/transcripts", status_code=201, dependencies=HEAVY)
-async def upload_transcript(project_id: str, file: UploadFile, db: DB) -> TranscriptOut:
+async def upload_transcript(
+    project_id: str, file: UploadFile, db: DB, purpose: Literal["meeting", "policy"] = "meeting"
+) -> TranscriptOut:
+    """Upload a meeting (transcript or recording), or with ?purpose=policy a policy/SOP
+    document (.docx/.txt) that the map is compared against but never merged with."""
     project = _project(db, project_id)
     filename = Path(file.filename or "").name  # never trust a client path
     if Path(filename).suffix.lower() in AUDIO_EXTENSIONS:
+        if purpose == "policy":
+            raise HTTPException(400, "A policy document must be text: .docx or .txt")
         return await run_in_threadpool(_upload_audio, project, file, filename, db)  # big file I/O + ffprobe
     data = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
@@ -177,8 +227,9 @@ async def upload_transcript(project_id: str, file: UploadFile, db: DB) -> Transc
     if not segments:
         raise HTTPException(400, "Transcript contains no text")
     t = _new_transcript(db, project, filename)
+    t.purpose = purpose
     storage.put(t.storage_key, data)
-    audit(db, "upload", "transcript", t.id, project_id=project.id, bytes=len(data), kind="text")
+    audit(db, "upload", "transcript", t.id, project_id=project.id, bytes=len(data), kind="text", purpose=purpose)
     db.commit()
     return _transcript_out(t).model_copy(update={"segment_count": len(segments)})
 
@@ -241,17 +292,111 @@ def _job_out(job: Job) -> JobOut:
     return JobOut(id=job.id, transcript_id=job.transcript_id, status=job.status, error=job.error, map_id=job.map_id)
 
 
+def _conflict_out(c: Conflict, index: dict[str, insights.Quote]) -> ConflictOut:
+    ss = insights.sides(c, index)
+    out = ConflictOut.model_validate(c, from_attributes=True)
+    return out.model_copy(
+        update={
+            "sides": [SideOut(label=s.label, quotes=[QuoteOut(**q.__dict__) for q in s.quotes]) for s in ss],
+            "owner_side": insights.owner_side(ss),
+        }
+    )
+
+
 @router.get("/projects/{project_id}/conflicts")
-def list_conflicts(project_id: str, db: DB, status: str | None = None) -> list[ConflictOut]:
-    q = select(Conflict).where(Conflict.project_id == _project(db, project_id).id).order_by(Conflict.created_at)
+def list_conflicts(
+    project_id: str, db: DB, status: str | None = None, origin: Literal["meeting", "policy"] | None = None
+) -> list[ConflictOut]:
+    p = _project(db, project_id)
+    q = select(Conflict).where(Conflict.project_id == p.id).order_by(Conflict.created_at)
     if status:
         q = q.where(Conflict.status == status)
-    return [ConflictOut.model_validate(c, from_attributes=True) for c in db.scalars(q)]
+    if origin:
+        q = q.where(Conflict.origin == origin)
+    index = insights.segment_index(db, p.id)
+    return [_conflict_out(c, index) for c in db.scalars(q)]
+
+
+@router.get("/projects/{project_id}/speakers")
+def list_speakers(project_id: str, db: DB) -> list[SpeakerOut]:
+    return [SpeakerOut.model_validate(s) for s in insights.speakers(db, _project(db, project_id))]
+
+
+@router.put("/projects/{project_id}/speakers/{name}")
+def set_speaker_role(project_id: str, name: str, body: SpeakerRoleIn, db: DB) -> SpeakerOut:
+    p = _project(db, project_id)
+    known = {s["name"]: s for s in insights.speakers(db, p)}
+    if name not in known:
+        raise HTTPException(404, "No speaker by that name in this project's meetings")
+    roles = dict(p.speaker_roles or {})
+    if body.role:
+        roles[name] = body.role
+    else:
+        roles.pop(name, None)
+    p.speaker_roles = roles  # reassign: JSON columns don't track in-place changes
+    audit(db, "set_speaker_role", "project", p.id, role=body.role)
+    db.commit()
+    return SpeakerOut.model_validate({**known[name], "role": body.role})
+
+
+def _gaps(db: Session, p: Project) -> list[Gap]:
+    if not p.merged_map_id:
+        return []
+    model = ProcessModel.model_validate(db.get_one(ProcessMap, p.merged_map_id).model)
+    dismissed = set(p.dismissed_gaps or [])
+    return [g for g in find_gaps(model) if g.id not in dismissed]
+
+
+@router.get("/projects/{project_id}/gaps")
+def list_gaps(project_id: str, db: DB) -> list[GapOut]:
+    return [GapOut(**g.__dict__) for g in _gaps(db, _project(db, project_id))]
+
+
+@router.post("/projects/{project_id}/gaps/{gap_id}/dismiss")
+def dismiss_gap(project_id: str, gap_id: str, db: DB) -> dict[str, str]:
+    p = _project(db, project_id)
+    if gap_id not in {g.id for g in _gaps(db, p)}:
+        raise HTTPException(404, "No such open gap")
+    p.dismissed_gaps = [*(p.dismissed_gaps or []), gap_id]
+    audit(db, "dismiss_gap", "project", p.id, gap_id=gap_id)
+    db.commit()
+    return {"status": "dismissed"}
+
+
+@router.get("/projects/{project_id}/agenda")
+def agenda(project_id: str, db: DB) -> Response:
+    """The next meeting's agenda as Markdown (template-built: no LLM)."""
+    p = _project(db, project_id)
+    index = insights.segment_index(db, p.id)
+    open_ = db.scalars(
+        select(Conflict).where(Conflict.project_id == p.id, Conflict.status == "open").order_by(Conflict.created_at)
+    ).all()
+    # Meeting disagreements first (numbered like the UI's points), then policy differences.
+    ordered = sorted(open_, key=lambda c: c.origin != "meeting")
+    model = ProcessModel.model_validate(db.get_one(ProcessMap, p.merged_map_id).model) if p.merged_map_id else None
+    body = build_agenda(p.name, [(c, insights.sides(c, index)) for c in ordered], _gaps(db, p), model, index)
+    audit(db, "export", "project", p.id, format="agenda")
+    db.commit()
+    safe = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in p.name).strip() or "process"
+    return Response(
+        body,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="Next meeting - {safe}.md"'},
+    )
+
+
+class VariantIn(BaseModel):
+    question: str = Field(min_length=1, max_length=200)  # what decides it, e.g. "Which region?"
+    labels: list[str]  # one per option, e.g. ["North", "South"]
 
 
 class ResolveIn(BaseModel):
     # Index into the conflict's options to apply it to the map; null = "I fixed the map myself".
     option: int | None = None
+    # "Both are true": keep every option as a branch of a new decision.
+    variant: VariantIn | None = None
+    # Policy differences: keep the map as is and record why.
+    note: Literal["deviation", "dismissed"] | None = None
 
 
 @router.post("/conflicts/{conflict_id}/resolve")
@@ -268,7 +413,12 @@ def resolve_conflict(
         raise HTTPException(404, "Conflict not found")
     if c.status != "open":
         raise HTTPException(409, "Conflict is already resolved")
-    choice = body.option if body else None
+    body = body or ResolveIn()
+    choice, variant = body.option, body.variant
+    if sum(x is not None for x in (choice, variant, body.note)) > 1:
+        raise HTTPException(400, "Choose one: an option, a variant, or a note")
+    if body.note and c.origin != "policy":
+        raise HTTPException(400, "Notes are for policy differences; pick an option or a variant")
     project = _project(db, c.project_id)
     if project.merged_map_id:
         pmap = maps.lock_map(db, project.merged_map_id)
@@ -284,11 +434,15 @@ def resolve_conflict(
             ) from None
         model = ProcessModel.model_validate(pmap.model)
         ops: list[AnyOp] = []
-        if choice is not None:
-            try:
+        try:
+            if choice is not None:
+                if not c.options:
+                    raise CannotApply("this difference has no options to apply; note it or dismiss it")
                 ops += resolution_ops(c.kind, c.node_ids, c.options, choice, model)
-            except CannotApply as e:
-                raise HTTPException(422, f"Can't apply that option automatically: {e}") from e
+            elif variant is not None:
+                ops += variant_ops(c.kind, c.node_ids, c.options, variant.question, variant.labels, model)
+        except CannotApply as e:
+            raise HTTPException(422, f"Can't apply that automatically: {e}") from e
         qid = f"conflict_{c.id}"
         if any(q.id == qid for q in model.open_questions):
             ops.append(ResolveOpenQuestion(op="resolve_open_question", question_id=qid))
@@ -296,10 +450,21 @@ def resolve_conflict(
             maps.commit_version(
                 db, pmap, apply_ops(model, ops), "resolve", maps.current_positions(pmap), [o.model_dump() for o in ops]
             )
-    c.status, c.resolution = "resolved", (c.options[choice] if choice is not None else None)
-    audit(db, "resolve_conflict", "conflict", c.id, project_id=c.project_id, applied_option=choice)
+    if variant is not None:
+        resolution: str | None = f"Both, by case ({variant.question.strip()}): " + "; ".join(
+            f"{lab.strip()}: {opt}" for lab, opt in zip(variant.labels, c.options, strict=True)
+        )
+    elif body.note:
+        resolution = {"deviation": "Noted as a deviation from the policy", "dismissed": "Dismissed"}[body.note]
+    else:
+        resolution = c.options[choice] if choice is not None else None
+    c.status, c.resolution = "resolved", resolution
+    audit(
+        db, "resolve_conflict", "conflict", c.id, project_id=c.project_id, applied_option=choice,
+        variant=variant is not None, note=body.note,
+    )  # fmt: skip
     db.commit()
-    return ConflictOut.model_validate(c, from_attributes=True)
+    return _conflict_out(c, insights.segment_index(db, c.project_id))
 
 
 class UsageOut(BaseModel):

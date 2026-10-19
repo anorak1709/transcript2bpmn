@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app import maps, storage
 from app.audit import audit
-from app.db.models import Conflict, Job, MapVersion, ProcessMap, Project, Transcript
+from app.db.models import Conflict, Job, MapVersion, ProcessMap, Project, Signoff, Transcript
 from app.db.tenancy import bind, system_session
 from app.llm.provider import LLMProvider
 from app.models.process import ProcessModel
@@ -67,6 +67,7 @@ def delete_project(db: Session, project: Project) -> dict[str, int]:
     for model, where in (
         (MapVersion, MapVersion.map_id.in_(map_ids)),
         (Conflict, Conflict.project_id == project.id),
+        (Signoff, Signoff.project_id == project.id),
         (ProcessMap, ProcessMap.project_id == project.id),
         (Job, Job.transcript_id.in_(transcript_ids)),
         (Transcript, Transcript.project_id == project.id),

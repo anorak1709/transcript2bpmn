@@ -173,6 +173,35 @@ uv run python -m eval.merge_eval                                                
 uv run python -m eval.merge_eval --pipeline eval.merge_eval:gold_extraction_pipeline   # merge only
 ```
 
+## Review tools
+
+All template- or graph-based (no LLM) except the policy check, which reuses the merge's matching.
+
+- **Speaker roles** (`GET/PUT /projects/{id}/speakers[/{name}]`): tag each speaker once as
+  process owner, does the work, or observer. Every disagreement carries `sides` (the quotes
+  behind each option, with speaker and role) and `owner_side` (the side the process owner
+  backs, when only one side has them). Shown, never acted on.
+- **Gaps** (`app/pipeline/gaps.py`, `GET /projects/{id}/gaps`, `POST …/gaps/{gap}/dismiss`):
+  decisions with one described outcome, steps with no owner, dead ends, steps nothing leads
+  to, and checks/approvals with no rejection path. Ids are stable, so dismissed gaps stay gone.
+- **Both are true** (`POST /conflicts/{id}/resolve {"variant": {"question", "labels"}}`):
+  instead of picking a side, adds a decision ("Which region?") with one labelled branch per
+  version; each version keeps its evidence (`variant_ops` in `app/pipeline/merge.py`). Not for
+  step-order disagreements (draw those by hand).
+- **Agenda** (`app/agenda.py`, `GET /projects/{id}/agenda`, Markdown): every open
+  disagreement, policy difference, gap and open question as a question, grouped by the people
+  who described that part of the process.
+- **Policy comparison** (`app/policy.py`): upload with `?purpose=policy` (.docx/.txt). It's
+  extracted like a meeting but never merged; differences from the map (owner, condition,
+  order, steps only in the policy, steps only in meetings) become conflicts with
+  `origin: "policy"`, listed apart. Settle with an option ("change the map to the policy") or
+  `{"note": "deviation" | "dismissed"}`. Rechecked after every merge; settled ones stay settled.
+- **Sign-off** (`app/api/signoffs.py`): `POST /projects/{id}/signoffs {name, lane_ids}` returns
+  a private link token (shown once; sha256 stored; 30 days; `DELETE /signoffs/{id}` revokes).
+  The link opens `/app/review/<token>` with no account: only that person's steps, where each
+  comes from and goes to, and the quotes behind it. Approve / request changes is recorded with
+  the map version seen, and audited.
+
 ## Data handling
 
 - **Retention:** `retention_days` per project. A daily arq cron (03:00) deletes each expired

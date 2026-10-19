@@ -13,6 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { ApiError } from "@/lib/api"
 import { useApiKey } from "@/lib/auth"
 import { ProjectPage } from "@/pages/project"
+import { ReviewPage } from "@/pages/review"
 import { Projects } from "@/pages/projects"
 import { Settings } from "@/pages/settings"
 import { SignIn } from "@/pages/sign-in"
@@ -47,6 +48,8 @@ function RequireKey() {
 
 const router = createBrowserRouter(
   [
+    // A stakeholder's sign-off link: no API key, no app shell (the token is the credential).
+    { path: "review/:token", element: <ReviewPage /> },
     {
       element: <RequireKey />,
       children: [

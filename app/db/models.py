@@ -56,6 +56,10 @@ class Project(Tenant, Base):
     # Raw files + transcript text are purged this many days after upload. None = keep.
     retention_days: Mapped[int | None] = mapped_column(Integer)
     merged_map_id: Mapped[str | None] = mapped_column(String(36))
+    # {speaker name: "owner" | "performer" | "observer"}, set by the user (app/insights.py)
+    speaker_roles: Mapped[dict[str, str]] = mapped_column(JSON, default=dict, server_default="{}")
+    # Gaps the user said aren't gaps (ids from app/pipeline/gaps.py), so they stop coming back
+    dismissed_gaps: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     created_at: Mapped[datetime] = _created()
 
 
@@ -65,6 +69,9 @@ class Transcript(Tenant, Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
     filename: Mapped[str] = mapped_column(String(255))
+    # meeting: merged into the project map. policy: an SOP/policy document, only compared
+    # against the map (app/policy.py), never merged into it.
+    purpose: Mapped[str] = mapped_column(String(16), default="meeting", server_default="meeting")
     storage_key: Mapped[str] = mapped_column(String(512))
     # Normalized segments (list of Segment dicts); filled by the pipeline. Source of truth for
     # the segment ids every map cites.
@@ -134,7 +141,11 @@ class Conflict(Tenant, Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
-    kind: Mapped[str] = mapped_column(String(16))  # owner | order | condition | sequence
+    # owner | order | condition | sequence; policy only: missing_step | unofficial_step
+    kind: Mapped[str] = mapped_column(String(16))
+    # meeting: meetings disagree with each other (also an open question on the map).
+    # policy: the map (what people said) differs from a policy document; listed separately.
+    origin: Mapped[str] = mapped_column(String(16), default="meeting", server_default="meeting")
     description: Mapped[str] = mapped_column(Text)
     options: Mapped[list[str]] = mapped_column(JSON)
     # [{transcript_id, segment_ids, says}] per side of the disagreement
@@ -143,6 +154,27 @@ class Conflict(Tenant, Base):
     status: Mapped[str] = mapped_column(String(16), default="open")  # open | resolved
     resolution: Mapped[str | None] = mapped_column(Text)  # the option applied; None = fixed by hand
     created_at: Mapped[datetime] = _created()
+
+
+class Signoff(Tenant, Base):
+    """A stakeholder's review link for their part of the merged map. The token is shown once;
+    only its sha256 is stored, like API keys."""
+
+    __tablename__ = "signoffs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(255))  # who is asked
+    lane_ids: Mapped[list[str]] = mapped_column(JSON)  # their part of the map
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    requested_version: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = _created()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision: Mapped[str | None] = mapped_column(String(32))  # approved | changes_requested
+    comment: Mapped[str | None] = mapped_column(Text)
+    decided_version: Mapped[int | None] = mapped_column(Integer)  # the map version they saw
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AuditLog(Tenant, Base):

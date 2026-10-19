@@ -135,16 +135,16 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         expect(page.get_by_role("heading", name="Invoices")).to_be_visible()
 
         # Upload meeting 1: UI uploads + enqueues, status goes live
-        page.locator("#upload-input").set_input_files(str(CASE / "transcript_1.vtt"))
+        page.locator("#upload-meeting").set_input_files(str(CASE / "transcript_1.vtt"))
         expect(page.get_by_text("transcript_1.vtt uploaded")).to_be_visible()
-        expect(page.get_by_role("cell", name="transcript_1.vtt", exact=True)).to_be_visible()
+        expect(page.get_by_role("cell", name=re.compile(r"^transcript_1\.vtt"))).to_be_visible()
         expect(page.get_by_text(re.compile(r"^Queued"))).to_be_visible()
         _process_latest(t, "transcript_1.vtt", "model_1.json")
         expect(page.get_by_text("Done")).to_be_visible(timeout=10_000)  # polling picked it up
 
         # Meeting 2 -> disagreements appear
-        page.locator("#upload-input").set_input_files(str(CASE / "transcript_2.txt"))
-        expect(page.get_by_role("cell", name="transcript_2.txt", exact=True)).to_be_visible()
+        page.locator("#upload-meeting").set_input_files(str(CASE / "transcript_2.txt"))
+        expect(page.get_by_role("cell", name=re.compile(r"^transcript_2\.txt"))).to_be_visible()
         _process_latest(t, "transcript_2.txt", "model_2.json")
         expect(page.get_by_role("button", name="Settle as Treasury")).to_be_visible(timeout=10_000)
         page.screenshot(path=str(SHOTS / "e2e-project.png"))
@@ -197,6 +197,22 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         expect(page.locator("code").filter(has_text="t2b_").first).to_be_visible()
 
         page.screenshot(path=str(SHOTS / "e2e-settings.png"), full_page=True)
+
+        # A stakeholder's review link opens with no API key and records their decision.
+        lanes = t.http.get(f"/maps/{map_id}").json()["model"]["lanes"]
+        treasury = next(x["id"] for x in lanes if x["name"] == "Treasury")
+        project_id = t.http.get(f"/maps/{map_id}").json()["project_id"]
+        token = t.http.post(f"/projects/{project_id}/signoffs", json={"name": "Sana", "lane_ids": [treasury]}).json()[
+            "token"
+        ]
+        reviewer = browser.new_context(viewport={"width": 1200, "height": 900}).new_page()
+        reviewer.on("console", on_console)
+        reviewer.on("pageerror", lambda e: errors.append(str(e)))
+        reviewer.goto(f"{server}/app/review/{token}")
+        expect(reviewer.get_by_role("heading", name="Validate supplier bank details")).to_be_visible()
+        reviewer.get_by_role("button", name="Approve my part").click()
+        expect(reviewer.get_by_role("status")).to_contain_text("You approved")
+        assert t.http.get(f"/projects/{project_id}/signoffs").json()[0]["status"] == "approved"
         browser.close()
 
     # Exactly two failed requests are part of the script: the wrong key at sign-in (401) and

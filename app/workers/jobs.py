@@ -14,6 +14,7 @@ from app.metrics import JOB_STAGE, JOBS
 from app.pipeline import ingest
 from app.pipeline.run import model_from_segments, prepare_segments
 from app.pipeline.transcribe import AUDIO_EXTENSIONS, Transcriber, get_transcriber
+from app.policy import check_policy
 from app.projects import merge_into_project, purge_expired
 
 log = logging.getLogger(__name__)
@@ -63,8 +64,13 @@ def run_job(job_id: str, llm: LLMProvider | None = None, transcriber: Transcribe
             pmap = create_map(db, transcript.project_id, transcript.id, model)
             job.map_id = pmap.id
 
-            stage("merging")
-            merge_into_project(db, db.get_one(Project, transcript.project_id), transcript, model, llm)
+            project = db.get_one(Project, transcript.project_id)
+            if transcript.purpose == "policy":  # a reference: compared with the map, never merged in
+                stage("comparing")
+            else:
+                stage("merging")
+                merge_into_project(db, project, transcript, model, llm)
+            check_policy(db, project, llm)  # the map or the policy changed: refresh the differences
             stage("done")
             JOBS.labels("done").inc()
         except Exception as e:

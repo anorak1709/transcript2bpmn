@@ -167,8 +167,18 @@ def _reachable(model: ProcessModel, src: str, dst: str, skip: tuple[str, str] | 
     return False
 
 
-def merge(llm: LLMProvider, base: ProcessModel, new: ProcessModel, transcript_id: str) -> MergeResult:
-    """`new` must already be qualified (see qualify())."""
+def merge(
+    llm: LLMProvider,
+    base: ProcessModel,
+    new: ProcessModel,
+    transcript_id: str,
+    ours: str = "the existing map",
+    theirs: str = "the new meeting",
+) -> MergeResult:
+    """`new` must already be qualified (see qualify()). `ours`/`theirs` name the two sides in
+    conflict descriptions (the policy check uses "the meetings" / "the policy")."""
+    Ours = ours[:1].upper() + ours[1:]
+    verb = "say" if ours.endswith("meetings") else "says"  # "the meetings say", "the map says"
     work = base.model_copy(deep=True)
     editor = edit.Editor(work)
     ops: list[edit.AnyOp] = []
@@ -234,7 +244,7 @@ def merge(llm: LLMProvider, base: ProcessModel, new: ProcessModel, transcript_id
             claimed = new_lane_names.get(new_node.lane_id, new_node.lane_id)
             conflict(
                 "owner",
-                f"Who does '{old_node.name}'? The existing map says {said}; the new meeting says {claimed}.",
+                f"Who does '{old_node.name}'? {Ours} {verb} {said}; {theirs} says {claimed}.",
                 [said, claimed],
                 [bid],
                 [old_node, new_node],
@@ -268,8 +278,8 @@ def merge(llm: LLMProvider, base: ProcessModel, new: ProcessModel, transcript_id
             if f.condition and existing.condition and not _same_condition(f.condition, existing.condition):
                 conflict(
                     "condition",
-                    f"When does '{names(u)}' lead to '{names(v)}'? Existing: \"{existing.condition}\"; "
-                    f'new meeting: "{f.condition}".',
+                    f"When does '{names(u)}' lead to '{names(v)}'? {Ours} {verb} \"{existing.condition}\"; "
+                    f'{theirs} says "{f.condition}".',
                     [existing.condition, f.condition],
                     [u, v],
                     [base_nodes.get(u) or new_nodes[f.source_id], new_nodes[f.source_id]],
@@ -281,8 +291,8 @@ def merge(llm: LLMProvider, base: ProcessModel, new: ProcessModel, transcript_id
         elif u not in added and v not in added and _reachable(work, v, u):
             conflict(
                 "order",
-                f"Order of '{names(u)}' and '{names(v)}': the existing map has '{names(v)}' first; "
-                f"the new meeting has '{names(u)}' first.",
+                f"Order of '{names(u)}' and '{names(v)}': {ours} has '{names(v)}' first; "
+                f"{theirs} has '{names(u)}' first.",
                 [f"'{names(v)}' first", f"'{names(u)}' first"],
                 [u, v],
                 [base_nodes[v], new_nodes[f.source_id]],
@@ -425,6 +435,116 @@ def resolution_ops(
                 edit.Connect(op="connect", source_id=second, target_id=t, condition=c),
             ]
         ops.append(edit.Connect(op="connect", source_id=first, target_id=second, condition=None))
+        return ops
+
+    raise CannotApply(f"unknown conflict kind {kind!r}")
+
+
+def variant_ops(
+    kind: str, node_ids: list[str], options: list[str], question: str, labels: list[str], model: ProcessModel
+) -> list[edit.AnyOp]:
+    """ "Both are true": instead of picking a side, add a decision (`question`, e.g. "Which
+    region?") whose branches (`labels`, one per option, e.g. "North" / "South") lead to each
+    version. Each version keeps the evidence it came from."""
+    if kind == "order":
+        raise CannotApply("a step order that differs by case needs drawing by hand; use the editor")
+    labels = [x.strip() for x in labels]
+    if not question.strip() or len(labels) != len(options) or not all(labels) or len(set(labels)) != len(labels):
+        raise CannotApply("give the deciding question and a different label for each option")
+    nodes = {n.id: n for n in model.nodes}
+    if any(nid not in nodes for nid in node_ids):
+        raise CannotApply("the steps this conflict refers to were changed or removed; edit the map directly")
+    out = [(f.source_id, f.target_id, f.condition) for f in model.flows]
+    ops: list[edit.AnyOp] = []
+
+    def gate_before(nid: str) -> str:  # predecessors -> new decision; returns its id
+        gid = f"variant_{nid}"
+        ops.append(
+            edit.AddGateway(
+                op="add_gateway", id=gid, type="exclusive_gateway", name=question.strip(),
+                lane_id=nodes[nid].lane_id, insert_after=None,
+            )
+        )  # fmt: skip
+        for s, t, c in out:
+            if t == nid:
+                ops.extend([
+                    edit.Disconnect(op="disconnect", source_id=s, target_id=nid),
+                    edit.Connect(op="connect", source_id=s, target_id=gid, condition=c),
+                ])  # fmt: skip
+        return gid
+
+    if kind == "owner":
+        (t,) = node_ids
+        task = nodes[t]
+        lane = next((x.id for x in model.lanes if x.name.strip().lower() == options[1].strip().lower()), None)
+        if lane is None:
+            lane = "lane_" + "_".join(options[1].lower().split())[:40]
+            ops.append(edit.AddLane(op="add_lane", id=lane, name=options[1]))
+        g = gate_before(t)
+        twin = f"{t}_v2"
+        succs = [(x, c) for s, x, c in out if s == t]
+        ops += [
+            edit.Connect(op="connect", source_id=g, target_id=t, condition=labels[0]),
+            edit.AddTask(op="add_task", id=twin, name=task.name, type=task.type, lane_id=lane, insert_after=None),
+            edit.AddSources(op="add_sources", node_id=twin, segment_ids=task.source_segment_ids),
+            edit.Connect(op="connect", source_id=g, target_id=twin, condition=labels[1]),
+        ]
+        if succs:  # both versions continue the same way
+            join = f"variant_{t}_join"
+            ops.append(
+                edit.AddGateway(
+                    op="add_gateway", id=join, type="exclusive_gateway", name="", lane_id=task.lane_id,
+                    insert_after=None,
+                )
+            )  # fmt: skip
+            for x, c in succs:
+                ops += [
+                    edit.Disconnect(op="disconnect", source_id=t, target_id=x),
+                    edit.Connect(op="connect", source_id=join, target_id=x, condition=c),
+                ]
+            ops += [
+                edit.Connect(op="connect", source_id=t, target_id=join, condition=None),
+                edit.Connect(op="connect", source_id=twin, target_id=join, condition=None),
+            ]
+        return ops
+
+    if kind == "condition":
+        u, v = node_ids
+        old, new = options[0], options[1]
+        g = gate_before(u)
+        twin = f"{u}_v2"
+        ops += [
+            edit.Connect(op="connect", source_id=g, target_id=u, condition=labels[0]),
+            edit.AddGateway(
+                op="add_gateway", id=twin, type="exclusive_gateway", name=_carry_values(nodes[u].name, old, new),
+                lane_id=nodes[u].lane_id, insert_after=None,
+            ),
+            edit.AddSources(op="add_sources", node_id=twin, segment_ids=nodes[u].source_segment_ids),
+            edit.Connect(op="connect", source_id=g, target_id=twin, condition=labels[1]),
+        ]  # fmt: skip
+        for s, x, c in out:  # the second version's branches, with its own figures
+            if s == u:
+                cond = new if x == v else (_carry_values(c, old, new) if c else c)
+                ops.append(edit.Connect(op="connect", source_id=twin, target_id=x, condition=cond))
+        return ops
+
+    if kind == "sequence":
+        n, *targets = node_ids
+        if len(labels) != len(targets):
+            raise CannotApply("give one label per next step")
+        g = f"variant_{n}"
+        ops += [edit.Disconnect(op="disconnect", source_id=n, target_id=t) for t in targets]
+        ops.append(
+            edit.AddGateway(
+                op="add_gateway", id=g, type="exclusive_gateway", name=question.strip(), lane_id=nodes[n].lane_id,
+                insert_after=None,
+            )
+        )  # fmt: skip
+        ops.append(edit.Connect(op="connect", source_id=n, target_id=g, condition=None))
+        ops += [
+            edit.Connect(op="connect", source_id=g, target_id=t, condition=lab)
+            for t, lab in zip(targets, labels, strict=True)
+        ]
         return ops
 
     raise CannotApply(f"unknown conflict kind {kind!r}")
