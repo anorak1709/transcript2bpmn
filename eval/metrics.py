@@ -1,12 +1,21 @@
 """Compare a predicted ProcessModel to a gold one.
 
-Nodes are matched one-to-one within the same kind (task / gateway type / event type),
-greedily by name similarity. Every other metric is computed through that matching.
+Nodes are matched one-to-one within the same kind (task / gateway type / event type).
+Every other metric is computed through that matching. Two matchers:
+- lexical (default): spelling similarity >= threshold. Strict: "Send invoice back to supplier"
+  and "Return invoice to supplier" don't match.
+- semantic: by meaning, via the merge step's resolver (embeddings, LLM confirms the close
+  calls). Needs an LLM; what the eval CLIs use by default.
 """
 
+from collections.abc import Callable
 from difflib import SequenceMatcher
+from typing import TYPE_CHECKING
 
 from app.models.process import GATEWAY_TYPES, TASK_TYPES, Node, ProcessModel
+
+if TYPE_CHECKING:
+    from app.llm.provider import LLMProvider
 
 
 def similarity(a: str, b: str) -> float:
@@ -60,24 +69,53 @@ def assign(weights: list[list[float]]) -> dict[int, int]:
     return {c: r for r, c in pairs.items()} if flip else pairs
 
 
-def match_nodes(pred: ProcessModel, gold: ProcessModel, threshold: float) -> dict[str, str]:
-    """Return {pred_node_id: gold_node_id}: the one-to-one matching with the highest total
-    name similarity among allowed pairs (same kind; tasks and gateways must also clear the
-    threshold; events match on type alone since their names vary wildly)."""
-
-    def weight(p: Node, g: Node) -> float:
-        if _kind(p) != _kind(g):
-            return 0.0
-        sim = similarity(p.name, g.name)
-        allowed = p.type in ("start_event", "end_event") or sim >= threshold
-        return 1.0 + sim if allowed else 0.0  # +1: any allowed match beats leaving both unmatched
-
-    pairs = assign([[weight(p, g) for g in gold.nodes] for p in pred.nodes])
-    return {pred.nodes[r].id: gold.nodes[c].id for r, c in pairs.items()}
+Item = tuple[str, str, str]  # (id, kind, name)
+# Matches pred items to gold items one-to-one, equal kinds only: {pred_id: gold_id}
+Matcher = Callable[[list[Item], list[Item]], dict[str, str]]
 
 
-def score(pred: ProcessModel, gold: ProcessModel, threshold: float = 0.8) -> dict[str, float]:
-    mapping = match_nodes(pred, gold, threshold)
+def lexical_matcher(threshold: float) -> Matcher:
+    def match(pred: list[Item], gold: list[Item]) -> dict[str, str]:
+        def weight(p: Item, g: Item) -> float:
+            sim = similarity(p[2], g[2])
+            return 1.0 + sim if p[1] == g[1] and sim >= threshold else 0.0  # +1: any match beats none
+
+        pairs = assign([[weight(p, g) for g in gold] for p in pred])
+        return {pred[r][0]: gold[c][0] for r, c in pairs.items()}
+
+    return match
+
+
+def semantic_matcher(llm: "LLMProvider") -> Matcher:
+    from app.pipeline.merge import resolve  # the same "is this the same step?" logic merging uses
+
+    return lambda pred, gold: resolve(llm, gold, pred)
+
+
+def _items(nodes: list[Node]) -> list[Item]:
+    return [(n.id, _kind(n), n.name) for n in nodes]
+
+
+def match_nodes(pred: ProcessModel, gold: ProcessModel, matcher: Matcher) -> dict[str, str]:
+    """Return {pred_node_id: gold_node_id}. Tasks and gateways go through the matcher; events
+    match on type alone (their names vary wildly), best name similarity first."""
+    events = ("start_event", "end_event")
+    mapping = matcher(_items([n for n in pred.nodes if n.type not in events]),
+                      _items([n for n in gold.nodes if n.type not in events]))  # fmt: skip
+    pe, ge = [n for n in pred.nodes if n.type in events], [n for n in gold.nodes if n.type in events]
+    pairs = assign([[1.0 + similarity(p.name, g.name) if p.type == g.type else 0.0 for g in ge] for p in pe])
+    return mapping | {pe[r].id: ge[c].id for r, c in pairs.items()}
+
+
+def score(
+    pred: ProcessModel,
+    gold: ProcessModel,
+    threshold: float = 0.8,
+    matcher: Matcher | None = None,
+    mapping: dict[str, str] | None = None,
+) -> dict[str, float]:
+    matcher = matcher or lexical_matcher(threshold)
+    mapping = mapping if mapping is not None else match_nodes(pred, gold, matcher)
     pred_by_id = {n.id: n for n in pred.nodes}
     gold_by_id = {n.id: n for n in gold.nodes}
 
@@ -85,11 +123,10 @@ def score(pred: ProcessModel, gold: ProcessModel, threshold: float = 0.8) -> dic
     gold_tasks = [n for n in gold.nodes if n.type in TASK_TYPES]
     matched_tasks = [(p, gold_by_id[mapping[p.id]]) for p in pred_tasks if p.id in mapping]
 
-    pred_lane = {lane.id: lane.name for lane in pred.lanes}
-    gold_lane = {lane.id: lane.name for lane in gold.lanes}
-    lane_hits = sum(
-        similarity(pred_lane.get(p.lane_id, ""), gold_lane.get(g.lane_id, "")) >= threshold for p, g in matched_tasks
+    lanes = matcher(
+        [(lane.id, "lane", lane.name) for lane in pred.lanes], [(lane.id, "lane", lane.name) for lane in gold.lanes]
     )
+    lane_hits = sum(lanes.get(p.lane_id or "") == g.lane_id for p, g in matched_tasks if g.lane_id)
 
     gold_gateways = [n for n in gold.nodes if n.type in GATEWAY_TYPES]
     gateway_hits = sum(1 for pid, gid in mapping.items() if pred_by_id[pid].type in GATEWAY_TYPES)

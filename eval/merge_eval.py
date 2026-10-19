@@ -32,8 +32,8 @@ import yaml
 from app.llm.provider import LiteLLMProvider, LLMProvider
 from app.models.process import TASK_TYPES, ProcessModel
 from app.pipeline.merge import ConflictDraft, merge, qualify
-from eval.metrics import score, similarity
-from eval.run_eval import load_pipeline
+from eval.metrics import Matcher, lexical_matcher, match_nodes, score, similarity
+from eval.run_eval import load_pipeline, make_matcher
 
 MergePipeline = Callable[[list[Path]], tuple[ProcessModel, list[ConflictDraft]]]
 METRICS = ("task_recall", "task_precision", "lane_accuracy", "flow_edge_f1", "duplicate_task_rate", "conflict_recall")
@@ -58,6 +58,8 @@ def gold_extraction_pipeline(
     return merge_models(llm or LiteLLMProvider(), models)
 
 
+# ponytail: duplicates stay lexical (a one-to-one matcher can't show two steps hitting one gold
+# step); paraphrased duplicates are undercounted. Upgrade: many-to-one semantic matching.
 def duplicate_task_rate(pred: ProcessModel, gold: ProcessModel, threshold: float) -> float:
     gold_tasks = [g for g in gold.nodes if g.type in TASK_TYPES]
     pred_tasks = [p for p in pred.nodes if p.type in TASK_TYPES]
@@ -70,22 +72,32 @@ def duplicate_task_rate(pred: ProcessModel, gold: ProcessModel, threshold: float
 
 
 def conflict_recall(
-    pred: ProcessModel, conflicts: list[ConflictDraft], expected: list[dict[str, str]], threshold: float
+    pred: ProcessModel,
+    conflicts: list[ConflictDraft],
+    expected: list[dict[str, str]],
+    threshold: float,
+    gold_names: dict[str, str] | None = None,
 ) -> float:
+    """`gold_names` {pred_id: matched gold step's name}: lets a conflict on a paraphrased step
+    count, since `expected` names the gold step."""
     if not expected:
         return 1.0
     names = {n.id: n.name for n in pred.nodes}
+    gold_names = gold_names or {}
+
+    def hit(nid: str, want: str) -> bool:
+        return any(similarity(x, want) >= threshold for x in (names.get(nid, ""), gold_names.get(nid, "")))
+
     found = sum(
-        any(
-            c.kind == e["kind"] and any(similarity(names.get(nid, ""), e["node"]) >= threshold for nid in c.node_ids)
-            for c in conflicts
-        )
-        for e in expected
+        any(c.kind == e["kind"] and any(hit(nid, e["node"]) for nid in c.node_ids) for c in conflicts) for e in expected
     )
     return found / len(expected)
 
 
-def run(pipeline: MergePipeline, gold_dir: Path, threshold: float = 0.8) -> dict[str, Any]:
+def run(
+    pipeline: MergePipeline, gold_dir: Path, threshold: float = 0.8, matcher: Matcher | None = None
+) -> dict[str, Any]:
+    matcher = matcher or lexical_matcher(threshold)
     cases = []
     for case_dir in sorted(p for p in gold_dir.iterdir() if p.is_dir()):
         meta = yaml.safe_load((case_dir / "meta.yaml").read_text()) or {}
@@ -94,10 +106,15 @@ def run(pipeline: MergePipeline, gold_dir: Path, threshold: float = 0.8) -> dict
             transcripts = sorted(case_dir.glob("transcript_*.*"), key=lambda p: int(p.stem.split("_")[1]))
             gold = ProcessModel.model_validate_json((case_dir / "expected.json").read_text())
             pred, conflicts = pipeline(transcripts)
-            m = score(pred, gold, threshold)
+            mapping = match_nodes(pred, gold, matcher)
+            gold_by_id = {n.id: n.name for n in gold.nodes}
+            m = score(pred, gold, threshold, matcher, mapping)
             m.pop("gateway_recall")
             m["duplicate_task_rate"] = duplicate_task_rate(pred, gold, threshold)
-            m["conflict_recall"] = conflict_recall(pred, conflicts, meta.get("expected_conflicts") or [], threshold)
+            m["conflict_recall"] = conflict_recall(
+                pred, conflicts, meta.get("expected_conflicts") or [], threshold,
+                {p: gold_by_id[g] for p, g in mapping.items()},
+            )  # fmt: skip
             case["metrics"] = m
             case["conflicts"] = [f"{c.kind}: {c.description}" for c in conflicts]
         except Exception as e:  # report and keep going
@@ -129,8 +146,10 @@ def main() -> None:
     ap.add_argument("--gold", type=Path, default=Path("eval/gold_merge"))
     ap.add_argument("--threshold", type=float, default=0.8)
     ap.add_argument("--out", type=Path, default=Path("eval/reports/merge"))
+    ap.add_argument("--match", choices=("semantic", "lexical"), default="semantic", help="semantic needs an LLM")
     args = ap.parse_args()
-    results = run(load_pipeline(args.pipeline), args.gold, args.threshold)  # type: ignore[arg-type]
+    matcher = make_matcher(args.match, args.threshold)
+    results = run(load_pipeline(args.pipeline), args.gold, args.threshold, matcher)  # type: ignore[arg-type]
     args.out.mkdir(parents=True, exist_ok=True)
     stem = datetime.now().strftime("%Y%m%d-%H%M%S")
     (args.out / f"{stem}.json").write_text(json.dumps(results, indent=2))

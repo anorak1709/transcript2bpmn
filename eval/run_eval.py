@@ -24,7 +24,7 @@ import yaml
 
 from app.models.process import ProcessModel
 from app.pipeline.validate import RepairResult
-from eval.metrics import score
+from eval.metrics import Matcher, lexical_matcher, score, semantic_matcher
 
 # A pipeline may return a bare model (stubs) or a RepairResult (real pipeline, adds repair stats).
 Pipeline = Callable[[Path], ProcessModel | RepairResult]
@@ -38,7 +38,9 @@ def transcript_path(case_dir: Path) -> Path:
     raise FileNotFoundError(f"{case_dir}: no transcript.vtt or transcript.txt")
 
 
-def run_eval(pipeline: Pipeline, gold_dir: Path, threshold: float = 0.8) -> dict[str, Any]:
+def run_eval(
+    pipeline: Pipeline, gold_dir: Path, threshold: float = 0.8, matcher: Matcher | None = None, match: str = "lexical"
+) -> dict[str, Any]:
     cases: list[dict[str, Any]] = []
     for case_dir in sorted(p for p in gold_dir.iterdir() if p.is_dir()):
         meta = yaml.safe_load((case_dir / "meta.yaml").read_text()) or {}
@@ -47,7 +49,7 @@ def run_eval(pipeline: Pipeline, gold_dir: Path, threshold: float = 0.8) -> dict
             gold = ProcessModel.model_validate_json((case_dir / "expected.json").read_text())
             out = pipeline(transcript_path(case_dir))
             model = out.model if isinstance(out, RepairResult) else out
-            case["metrics"] = score(model, gold, threshold)
+            case["metrics"] = score(model, gold, threshold, matcher)
             if isinstance(out, RepairResult):
                 case["repair_attempts"] = out.repair_attempts
                 case["unresolved_errors"] = [f"{e.code}: {e.message}" for e in out.unresolved_errors]
@@ -59,6 +61,7 @@ def run_eval(pipeline: Pipeline, gold_dir: Path, threshold: float = 0.8) -> dict
     ok = [c["metrics"] for c in cases if "metrics" in c]
     return {
         "threshold": threshold,
+        "match": match,
         "cases": cases,
         "aggregate": {m: mean(c[m] for c in ok) for m in METRICS} if ok else {},
         "failed": sum("error" in c for c in cases),
@@ -68,7 +71,8 @@ def run_eval(pipeline: Pipeline, gold_dir: Path, threshold: float = 0.8) -> dict
 
 
 def to_markdown(results: dict[str, Any], title: str) -> str:
-    lines = [f"# Eval report: {title}", "", f"Fuzzy-match threshold: {results['threshold']}", ""]
+    how = "by meaning" if results.get("match") == "semantic" else f"by spelling, threshold {results['threshold']}"
+    lines = [f"# Eval report: {title}", "", f"Steps matched {how}", ""]
     extra = ("repair attempts", "unresolved errors")
     lines += ["| case | type | " + " | ".join(METRICS + extra) + " |", "|---" * (len(METRICS) + 4) + "|"]
     for c in results["cases"]:
@@ -102,6 +106,14 @@ def write_report(results: dict[str, Any], out_dir: Path, label: str) -> Path:
     return md
 
 
+def make_matcher(match: str, threshold: float) -> Matcher:
+    if match == "lexical":
+        return lexical_matcher(threshold)
+    from app.llm.provider import LiteLLMProvider
+
+    return semantic_matcher(LiteLLMProvider())
+
+
 def load_pipeline(spec: str) -> Pipeline:
     module, _, attr = spec.partition(":")
     fn: Pipeline = getattr(importlib.import_module(module), attr)
@@ -114,9 +126,12 @@ def main() -> None:
     ap.add_argument("--gold", type=Path, default=Path("eval/gold"))
     ap.add_argument("--threshold", type=float, default=0.8)
     ap.add_argument("--out", type=Path, default=Path("eval/reports"))
+    ap.add_argument("--match", choices=("semantic", "lexical"), default="semantic", help="semantic needs an LLM")
     args = ap.parse_args()
 
-    results = run_eval(load_pipeline(args.pipeline), args.gold, args.threshold)
+    results = run_eval(
+        load_pipeline(args.pipeline), args.gold, args.threshold, make_matcher(args.match, args.threshold), args.match
+    )
     report = write_report(results, args.out, args.pipeline)
     print(report.read_text())
     print(f"Report: {report}")

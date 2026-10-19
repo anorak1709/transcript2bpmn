@@ -15,7 +15,7 @@ from app.pipeline.prompts import load_prompt
 log = logging.getLogger(__name__)
 
 FILTER_PROMPT = "filter_v1"
-EXTRACT_PROMPT = "extract_v1"
+EXTRACT_PROMPT = "extract_v2"
 BATCH_CHARS = 12_000  # ~3k tokens of transcript per filter call
 
 

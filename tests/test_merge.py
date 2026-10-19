@@ -186,3 +186,10 @@ def edit_ops(*raw: dict[str, Any]) -> list[Any]:
     from app.pipeline.edit import EditPlan
 
     return list(EditPlan.model_validate({"ops": list(raw), "reply": ""}).ops)
+
+
+def test_condition_wording_alone_is_not_a_disagreement() -> None:
+    from app.pipeline.merge import _same_condition
+
+    assert _same_condition("Matches", "Matches PO") and _same_condition("Yes", "yes")
+    assert not _same_condition("Over $5,000", "Over $10,000")

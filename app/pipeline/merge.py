@@ -143,6 +143,14 @@ def _norm(cond: str | None) -> str:
     return " ".join((cond or "").lower().replace("$", "").replace(",", "").split())
 
 
+def _same_condition(a: str, b: str) -> bool:
+    """Wording-only differences aren't disagreements: "Matches" vs "Matches PO". The same words,
+    or one label's words all inside the other's, count as the same; "Over 5000" vs "Over 10000"
+    doesn't (the figures differ)."""
+    wa, wb = set(_norm(a).split()), set(_norm(b).split())
+    return wa <= wb or wb <= wa
+
+
 def _reachable(model: ProcessModel, src: str, dst: str, skip: tuple[str, str] | None = None) -> bool:
     out: dict[str, list[str]] = defaultdict(list)
     for f in model.flows:
@@ -257,7 +265,7 @@ def merge(llm: LLMProvider, base: ProcessModel, new: ProcessModel, transcript_id
         u, v = node_map[f.source_id], node_map[f.target_id]
         existing = next((x for x in work.flows if x.source_id == u and x.target_id == v), None)
         if existing is not None:
-            if f.condition and existing.condition and _norm(f.condition) != _norm(existing.condition):
+            if f.condition and existing.condition and not _same_condition(f.condition, existing.condition):
                 conflict(
                     "condition",
                     f"When does '{names(u)}' lead to '{names(v)}'? Existing: \"{existing.condition}\"; "

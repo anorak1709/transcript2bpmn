@@ -28,7 +28,7 @@ upload ─► ingest ─► normalize ─► extract (filter, extract) ─► va
   misrecognitions and false starts per segment. Ids never change, and rewrites that are empty
   or much longer than the original are rejected.
 - **Extract** (`extract.py`): prompts are versioned files in `app/pipeline/prompts/`
-  (`filter_v1.md`, `extract_v1.md`). To change a prompt, add `_v2` and bump the constant, so
+  (`filter_v1.md`, `extract_v2.md`). To change a prompt, add `_v2` and bump the constant, so
   eval reports stay comparable. Invented citation ids are dropped; a node left uncited
   borrows its neighbours' citations with confidence halved, so every node cites ≥1 real segment.
   **Long meetings:** above `EXTRACT_MAX_CHARS` (60k chars ≈ 15k tokens) the transcript is
@@ -433,16 +433,19 @@ meta.yaml       # meeting_type: walkthrough | general; notes: ...
 
 ```bash
 make eval                                                    # real pipeline (needs .env LLM config)
-make eval ARGS="--pipeline eval.stub_pipeline:pipeline"      # oracle stub, no LLM
-make eval ARGS="--pipeline mymodule:fn --threshold 0.75"     # any Callable[[Path], ProcessModel]
+make eval ARGS="--pipeline eval.stub_pipeline:pipeline --match lexical"   # oracle stub, no LLM
+make eval ARGS="--pipeline mymodule:fn --match lexical --threshold 0.75"  # any Callable[[Path], ProcessModel]
 ```
 
 Reports land in `eval/reports/<timestamp>.{md,json}` (gitignored) so runs can be diffed.
 
 Metrics (macro-averaged over cases): task recall, task precision, lane accuracy, gateway
 recall, flow-edge F1. Nodes are matched one-to-one within kind (task / gateway type /
-event type) by fuzzy name similarity (`difflib`, threshold `--threshold`, default 0.8);
-events match on type alone. Lane accuracy and edge F1 are computed through that matching,
+event type). `--match semantic` (default) pairs tasks, gateways and lanes by meaning, using
+the merge step's resolver (embeddings; the "merge" model confirms close calls), so
+"Send invoice back to supplier" counts as "Return invoice to supplier". `--match lexical`
+uses spelling similarity (`difflib`, `--threshold`, default 0.8): no LLM needed, but it
+underscores paraphrases. Events match on type alone. Lane accuracy and edge F1 are computed through that matching,
 so different ids in the prediction don't matter.
 
 The default is the real pipeline (`app.pipeline.run:eval_pipeline`). If a case fails (e.g.
