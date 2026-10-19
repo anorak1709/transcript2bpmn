@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Transcript to BPMN: Proof of Concept Report</title>
+<style>
+  @font-face { font-family: "EB Garamond"; src: url(assets/eb-garamond-latin-wght-normal.woff2) format("woff2"); font-weight: 400 800; }
+  @font-face { font-family: "EB Garamond"; src: url(assets/eb-garamond-latin-wght-italic.woff2) format("woff2"); font-weight: 400 800; font-style: italic; }
+  @font-face { font-family: "Lato"; src: url(assets/lato-latin-400-normal.woff2) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Lato"; src: url(assets/lato-latin-400-italic.woff2) format("woff2"); font-weight: 400; font-style: italic; }
+  @font-face { font-family: "Lato"; src: url(assets/lato-latin-700-normal.woff2) format("woff2"); font-weight: 700; }
+
+  :root { --ink: #1a1a1a; --graphite: #5c5a55; --oxblood: #8b2e2a; --tint: #f6e9e6; --hairline: #e4ded3; --rule: #cfc8bb; --shade: #f4f0e8; }
+  @page { size: A4; margin: 22mm 20mm 20mm 20mm; }
+  @page :first { margin: 0; }
+  * { box-sizing: border-box; }
+  html { font-family: "Lato", sans-serif; font-size: 9.6pt; color: var(--ink); line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; }
+  h1, h2, h3, .serif { font-family: "EB Garamond", Georgia, serif; font-weight: 560; line-height: 1.2; }
+  h2 { font-size: 21pt; margin: 0 0 4mm; padding-bottom: 2.5mm; border-bottom: 0.6pt solid var(--rule); }
+  h2 .num { color: var(--oxblood); font-style: italic; margin-right: 3mm; }
+  h3 { font-size: 13.5pt; margin: 6mm 0 2mm; break-after: avoid; }
+  p { margin: 0 0 3mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 5mm; }
+  li { margin-bottom: 1.4mm; }
+  .label { font-variant-caps: all-small-caps; letter-spacing: .07em; font-weight: 700; color: var(--graphite); font-size: 10.5pt; }
+  .lede { font-family: "EB Garamond", serif; font-size: 13.5pt; line-height: 1.45; color: var(--ink); }
+  .muted { color: var(--graphite); }
+  section { break-before: page; }
+  .keep { break-inside: avoid; }
+
+  /* cover */
+  .cover { height: 297mm; padding: 32mm 24mm 22mm; display: flex; flex-direction: column; background: #fdfbf7; }
+  .cover h1 { font-size: 44pt; margin: 6mm 0 4mm; letter-spacing: -.01em; }
+  .cover h1 i { color: var(--graphite); font-weight: 500; }
+  .cover .sub { font-family: "EB Garamond", serif; font-style: italic; font-size: 17pt; color: var(--graphite); max-width: 140mm; }
+  .cover .rule { border-top: 0.6pt solid var(--rule); margin: 12mm 0 8mm; }
+  .cover dl { display: grid; grid-template-columns: 34mm 1fr; row-gap: 2.5mm; margin: 0; font-size: 10.5pt; }
+  .cover dt { margin: 0; } .cover dd { margin: 0; }
+  .cover .foot { margin-top: auto; font-size: 9pt; color: var(--graphite); border-top: 0.6pt solid var(--hairline); padding-top: 4mm; }
+  .cover img { width: 100%; border: 0.6pt solid var(--rule); margin-top: 12mm; }
+
+  /* elements */
+  figure { margin: 4mm 0 5mm; break-inside: avoid; }
+  figure img { width: 100%; max-height: 105mm; object-fit: contain; object-position: left; display: block; border: 0.6pt solid var(--rule); }
+  figcaption { font-size: 8.8pt; color: var(--graphite); margin-top: 1.8mm; }
+  figcaption b { color: var(--ink); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+  .callout { border-left: 2pt solid var(--oxblood); background: var(--tint); padding: 3mm 4mm; margin: 4mm 0; break-inside: avoid; }
+  .callout.plain { border-left-color: var(--ink); background: var(--shade); }
+  .callout p:last-child { margin: 0; }
+  blockquote { margin: 0 0 2.5mm; padding-left: 4mm; border-left: 0.6pt solid var(--rule); font-family: "EB Garamond", serif; font-style: italic; font-size: 11.5pt; line-height: 1.4; }
+  blockquote cite { display: block; font-style: normal; font-family: "Lato", sans-serif; font-variant-caps: all-small-caps; letter-spacing: .06em; font-size: 9.5pt; color: var(--graphite); margin-top: .8mm; }
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0 4mm; font-size: 9.5pt; break-inside: avoid; }
+  th { text-align: left; font-variant-caps: all-small-caps; letter-spacing: .06em; color: var(--graphite); font-weight: 700; padding: 1.5mm 2mm 1.5mm 0; border-bottom: 0.6pt solid var(--rule); font-size: 10pt; }
+  td { padding: 2mm 2mm 2mm 0; border-bottom: 0.6pt solid var(--hairline); vertical-align: top; }
+  td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; margin: 5mm 0; }
+  .step { border-top: 1.5pt solid var(--ink); padding-top: 2.5mm; break-inside: avoid; }
+  .step .serif { font-size: 13pt; display: block; margin-bottom: 1mm; }
+  .step .roman { color: var(--oxblood); font-family: "EB Garamond", serif; font-style: italic; font-size: 13pt; }
+  .points { list-style: none; padding: 0; break-inside: avoid; }
+  .points li { display: grid; grid-template-columns: 8mm 1fr; padding: 2mm 0; border-bottom: 0.6pt solid var(--hairline); margin: 0; }
+  .points li .r { color: var(--oxblood); font-family: "EB Garamond", serif; font-style: italic; font-size: 12pt; }
+  .sop { font-size: 9.3pt; background: var(--shade); padding: 4mm 5mm; border: 0.6pt solid var(--hairline); break-inside: avoid; }
+  .sop ol { padding-left: 5mm; }
+  .sop blockquote { font-size: 10.5pt; }
+  .status { white-space: nowrap; font-weight: 700; }
+  .status.ok::before { content: "✓ "; } .status.part::before { content: "◐ "; } .status.no::before { content: "○ "; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div class="label">Proof of concept report</div>
+  <h1>Transcript <i>to</i> BPMN</h1>
+  <div class="sub">Turning the meetings where people explain how work gets done into process maps every team can check, settle and reuse.</div>
+  <img src="assets/map-merged-after.png" alt="Supplier invoice approval process map produced from two meetings" />
+  <div class="rule"></div>
+  <dl>
+    <dt class="label">Prepared by</dt><dd>Kartik</dd>
+    <dt class="label">Date</dt><dd>16 October 2026</dd>
+    <dt class="label">Status</dt><dd>Working proof of concept, not yet piloted with real customer meetings</dd>
+    <dt class="label">For</dt><dd>Business stakeholders</dd>
+  </dl>
+  <div class="foot">The map above was produced by the proof of concept from two short meetings about supplier invoice approval, after its three points of disagreement were settled. Section III walks through how.</div>
+</div>
+
+<!-- ============ I. SUMMARY ============ -->
+<section>
+  <h2><span class="num">i.</span>Summary</h2>
+  <p class="lede">Most organisations learn how a process really works by talking about it in workshops, handovers and process-discovery calls. Writing those conversations up as a proper process map takes an analyst hours, and it often misses that two teams described the process differently.</p>
+  <p><b>Transcript to BPMN</b> takes the recordings or transcripts of those meetings and drafts the process map automatically, in BPMN 2.0, the standard notation used by process tools such as Camunda and Signavio. It does three things a plain AI summary does not:</p>
+  <ul>
+    <li><b>Every step can be traced to the words behind it.</b> Each box on the map links to the quotes it came from, with the speaker, the meeting and the timestamp.</li>
+    <li><b>Several meetings become one map.</b> When a second team describes the same process, their account is merged into the existing map rather than producing a second, competing one.</li>
+    <li><b>Disagreements are shown, not hidden.</b> Where meetings contradict each other (who does a step, what the approval threshold is, which order things happen in), the tool lists each point and lets a person settle it with one click.</li>
+  </ul>
+  <p>People stay in charge. The map can be edited by hand or by typing a change in plain English, and every change is kept as a revision that can be undone. The result can be exported as a BPMN file, a diagram image, or a written standard operating procedure (SOP).</p>
+
+  <div class="callout plain keep">
+    <div class="label">What this proof of concept shows</div>
+    <p>The whole journey works end to end in a working web application: upload meetings, get a draft map, merge a second meeting, review the disagreements, settle them, edit, and export. It runs with organisation-level data separation, retention rules and an activity log.</p>
+  </div>
+  <div class="callout keep">
+    <div class="label" style="color: var(--oxblood)">What it does not show yet</div>
+    <p>We have <b>not yet measured how accurately the AI drafts maps from real meetings.</b> The examples in this report use reference ("ideal") readings of two short sample meetings in place of a live AI model, so they show what the product does with a good reading, not how often the AI gets the reading right. Measuring that is the first step of the plan in Section VII, and it needs AI-model access and 15–20 real meetings.</p>
+  </div>
+
+  <h3>What we're asking for</h3>
+  <ol>
+    <li>Approval of an <b>AI provider</b> for the evaluation (OpenAI, or Azure OpenAI if data must stay in the company's cloud tenancy).</li>
+    <li><b>15–20 real process meetings</b>, each with a process map the business already trusts, so accuracy can be measured honestly.</li>
+    <li>One <b>pilot team</b> (for example accounts payable or HR onboarding) to use it for four weeks once accuracy is acceptable.</li>
+  </ol>
+</section>
+
+<!-- ============ II. PROBLEM & APPROACH ============ -->
+<section>
+  <h2><span class="num">ii.</span>The problem and our approach</h2>
+  <h3>Why process mapping is slow</h3>
+  <p>Process knowledge mostly lives in people's heads, and it comes out in conversation. A typical mapping exercise looks like this:</p>
+  <ul>
+    <li>An analyst runs several interviews or workshops with the teams involved.</li>
+    <li>They re-listen to recordings or reread notes and draw the map by hand.</li>
+    <li>Contradictions between teams ("finance approves over $5,000" versus "over $10,000") are found late, often only when the map is reviewed, or not at all.</li>
+    <li>Nobody can easily see why a step is on the map, so reviewers have to trust the analyst's reading.</li>
+  </ul>
+  <p>The meetings are already happening and are increasingly recorded and transcribed by Teams, Zoom or Meet. The missing piece is turning those transcripts into a map people can trust.</p>
+
+  <h3>How it works for the user</h3>
+  <div class="steps">
+    <div class="step"><span class="roman">i.</span><span class="serif">Add meetings</span>Drop in a transcript (Teams, Zoom or Meet export, Word or text) or a recording (audio or video). Processing starts on its own.</div>
+    <div class="step"><span class="roman">ii.</span><span class="serif">Get a draft</span>The tool sets aside off-topic chatter, identifies the steps, who does them, the decisions and their conditions, and draws the map.</div>
+    <div class="step"><span class="roman">iii.</span><span class="serif">Settle differences</span>Each new meeting is merged into the process's single map. Contradictions become numbered points to settle.</div>
+    <div class="step"><span class="roman">iv.</span><span class="serif">Refine and export</span>Edit visually or in plain English, undo any revision, and export as BPMN, an image, or a written SOP.</div>
+  </div>
+
+  <h3>Principles behind the design</h3>
+  <table>
+    <tr><th style="width: 34%">Principle</th><th>What it means in practice</th></tr>
+    <tr><td><b>Evidence for every step</b></td><td>Every step, decision and handover keeps a link to the transcript lines it came from. Reviewers check the source instead of trusting the tool.</td></tr>
+    <tr><td><b>AI proposes, people decide</b></td><td>The tool never quietly picks a side when meetings disagree. It asks. Edits are versioned and reversible.</td></tr>
+    <tr><td><b>The AI never writes the file directly</b></td><td>The AI only describes the process in a structured form. Ordinary, predictable software checks that description (no dead ends, no steps without an owner) and produces the BPMN file, which is checked against the official BPMN 2.0 standard before anyone sees it.</td></tr>
+    <tr><td><b>Standard output</b></td><td>Maps are standard BPMN 2.0, so they can go into the organisation's existing process tools rather than being locked into this one.</td></tr>
+    <tr><td><b>Meeting content is sensitive</b></td><td>Each organisation's data is kept separate, content can be deleted automatically after a set number of days, and the activity log records who did what without recording what was said.</td></tr>
+  </table>
+</section>
+
+<!-- ============ III. WORKED EXAMPLE ============ -->
+<section>
+  <h2><span class="num">iii.</span>Worked example: supplier invoice approval</h2>
+  <p>This example uses two short sample meetings written for testing. They are deliberately small so the whole journey fits on a few pages, and they contain the kind of contradictions that real teams produce.</p>
+
+  <h3>Meeting one: accounts payable and finance</h3>
+  <blockquote>A supplier invoice lands in the AP inbox, and someone on my team, um, enters it into the ERP. Then we match it against the purchase order. If it doesn't match, we send it back to the supplier.<cite>Priya · 0:06</cite></blockquote>
+  <blockquote>And if it matches, anything over five thousand dollars comes to me in finance for approval.<cite>Marco · 0:20</cite></blockquote>
+  <blockquote>Once it's approved either way, the payment run picks it up on Friday and pays the supplier.<cite>Marco · 0:33</cite></blockquote>
+  <p>From this meeting alone the tool draws the following map. It puts each step in the team that does it (the horizontal bands, called lanes) and shows the two decisions: does the invoice match the purchase order, and is it above the $5,000 threshold.</p>
+  <figure>
+    <img src="assets/map-meeting1.png" alt="Map from meeting one" />
+    <figcaption><b>Figure 1.</b> The map drafted from meeting one: two teams (Accounts Payable and Finance), six steps and two decisions.</figcaption>
+  </figure>
+
+  <h3>Meeting two: finance and treasury</h3>
+  <p>A week later, a different group describes the same process:</p>
+  <blockquote>If it matches and it's over ten thousand dollars, Marco approves it. Ten thousand or less, we approve it in AP.<cite>Sana</cite></blockquote>
+  <blockquote>After approval, treasury validates the supplier's bank details.<cite>Marco</cite></blockquote>
+  <blockquote>And then treasury pays the supplier in the Friday payment run.<cite>Sana</cite></blockquote>
+  <p>The tool recognises that "AP keys each invoice into the ERP" is the same step as "enters it into the ERP", even though the wording differs, so it does not add a duplicate. It adds the step that is genuinely new (treasury validating bank details) and the new Treasury team. It finds <b>three points where the meetings disagree</b>:</p>
+  <ol class="points">
+    <li><span class="r">i.</span><span><b>Who pays the supplier?</b> Meeting one implies Finance; meeting two says Treasury.</span></li>
+    <li><span class="r">ii.</span><span><b>When does finance approve?</b> Over $5,000, or over $10,000?</span></li>
+    <li><span class="r">iii.</span><span><b>When does AP approve directly?</b> $5,000 or less, or $10,000 or less?</span></li>
+  </ol>
+</section>
+
+<div>
+  <h3>Reviewing the disagreements</h3>
+  <p>The process page lists each point in plain English, with the two answers as buttons. The same numeral marks the affected step on the diagram, so a reviewer can see exactly what is in dispute and click through to the quotes from both meetings before choosing.</p>
+  <figure>
+    <img src="assets/before-project.png" alt="Process page listing three points of disagreement" />
+    <figcaption><b>Figure 2.</b> The process file after meeting two: both meetings processed, three numbered points to settle, each with a "Settle as…" choice or "I fixed it myself".</figcaption>
+  </figure>
+  <figure>
+    <img src="assets/before-editor.png" alt="Map editor with a disputed step selected, showing its source quotes" />
+    <figcaption><b>Figure 3.</b> The map editor. The selected step, "Pay supplier in weekly payment run", is marked as point i. The side panel shows the quote from each meeting it is based on, with the speaker and timestamp.</figcaption>
+  </figure>
+</div>
+
+<div>
+  <h3>The settled map</h3>
+  <p>Here the reviewer confirmed that Treasury pays suppliers and that the threshold is $10,000. Each choice was applied to the map as a new revision, so any of them can be undone. The final map has three teams, the bank-details check, and the corrected thresholds:</p>
+  <figure>
+    <img src="assets/map-merged-after.png" alt="Final merged map" />
+    <figcaption><b>Figure 4.</b> The single map for the process, combining both meetings, after the three points were settled. This image is a standard export, ready to paste into a document.</figcaption>
+  </figure>
+  <p>Settling the thresholds also updated the decision itself: it now reads "Amount over $10,000?", so the diagram, its branches and the written procedure all agree.</p>
+  <p>Without the tool, an analyst would have had to spot all three contradictions by comparing notes from both sessions. Here they were listed automatically, with the evidence for each side attached.</p>
+</div>
+
+<!-- ============ IV. WORKSPACE & OUTPUTS ============ -->
+<section>
+  <h2><span class="num">iv.</span>The workspace and what it produces</h2>
+  <p>The proof of concept is a complete web application, not a script. It is designed to feel like a well-kept case file rather than a dashboard: an index of processes, a file for each one, and an editor.</p>
+  <figure>
+    <img src="assets/before-index.png" alt="Index of processes" />
+    <figcaption><b>Figure 5.</b> The index. Each process shows how many meetings it draws on, when it was last revised, which revision it is on, and how many points are still open.</figcaption>
+  </figure>
+  <h3>Editing</h3>
+  <ul>
+    <li><b>Visually:</b> drag, add, rename or delete steps in the diagram editor.</li>
+    <li><b>In plain English:</b> type a change such as "Finance also checks the VAT number before approving" and the tool applies it to the map. The change is checked before it is saved, and a change that would break the map is refused.</li>
+    <li><b>Safely:</b> every save, AI edit and settled point is a numbered revision that can be undone. If two people edit the same map at once, the second person is told the map has changed and nothing is silently overwritten.</li>
+  </ul>
+  <h3>Outputs</h3>
+  <table>
+    <tr><th style="width: 30%">Export</th><th>Use</th></tr>
+    <tr><td><b>BPMN 2.0 file</b></td><td>Import into process tools such as Camunda or Signavio. Each file is checked against the official BPMN 2.0 standard before it is offered.</td></tr>
+    <tr><td><b>Written procedure (SOP)</b></td><td>A readable document listing the roles, numbered steps with owners, the decisions and their conditions, and the outcomes. Each step quotes the meeting lines it came from.</td></tr>
+    <tr><td><b>Diagram image (PNG / SVG)</b></td><td>For slides, wikis and reports. Drawn by the same component as the editor, so it looks exactly like the editor.</td></tr>
+  </table>
+</section>
+
+<div>
+  <h3>Sample: the written procedure</h3>
+  <p class="muted">An excerpt of the SOP exported for the settled invoice process, unedited apart from shortening.</p>
+  <div class="sop">
+    <div class="serif" style="font-size: 15pt; margin-bottom: 1mm">Supplier invoice approval</div>
+    <p class="muted" style="font-style: italic">Standard operating procedure generated from meeting transcripts. Quotes show where each step came from; review before publishing.</p>
+    <p><b>Roles:</b> Accounts Payable · Finance · Treasury &nbsp;&nbsp; <b>Starts when:</b> Invoice received</p>
+    <ol>
+      <li><b>Enter invoice into ERP</b>, Accounts Payable
+        <blockquote>On our side, AP keys each invoice into the ERP and checks it against the purchase order.<cite>Sana · transcript_2.txt</cite></blockquote></li>
+      <li><b>Match invoice to purchase order</b>, Accounts Payable</li>
+    </ol>
+    <p style="margin-left: 5mm"><b>Decision (Accounts Payable): Invoice matches PO?</b> If no match: go to step 3 (Return invoice to supplier). If it matches: go to the amount check.</p>
+    <p style="margin-left: 5mm"><b>Decision (Accounts Payable): Amount over $10,000?</b> If over $10,000: go to step 5 (Approve invoice (finance)). If $10,000 or less: go to step 4 (Approve invoice (AP)).</p>
+    <ol start="6">
+      <li><b>Validate supplier bank details</b>, Treasury
+        <blockquote>After approval, treasury validates the supplier's bank details.<cite>Marco · transcript_2.txt</cite></blockquote></li>
+      <li><b>Pay supplier in weekly payment run</b>, Treasury
+        <blockquote>Once it's approved either way, the payment run picks it up on Friday and pays the supplier.<cite>Marco · transcript_1.vtt · 0:33</cite></blockquote>
+        <blockquote>And then treasury pays the supplier in the Friday payment run.<cite>Sana · transcript_2.txt</cite></blockquote></li>
+    </ol>
+    <p style="margin: 0"><b>Outcome:</b> Invoice paid</p>
+  </div>
+  <p style="margin-top: 4mm">Note that step 7 cites both meetings: the procedure shows that the step was confirmed by two separate groups, which is useful evidence when the SOP is reviewed or audited.</p>
+</div>
+
+<!-- ============ V. TRUST ============ -->
+<section>
+  <h2><span class="num">v.</span>Data, privacy and control</h2>
+  <p>Meeting recordings can contain sensitive information, so these controls are built into the proof of concept rather than left for later:</p>
+  <table>
+    <tr><th style="width: 30%">Control</th><th>What it does</th></tr>
+    <tr><td><b>Separate workspaces</b></td><td>Each organisation's processes, meetings and maps are kept apart, and this is enforced on every request, not just hidden in the interface.</td></tr>
+    <tr><td><b>Automatic deletion</b></td><td>Each process can be set to delete its recordings and transcript text after a chosen number of days. The maps stay usable; their quotes then show as "no longer available".</td></tr>
+    <tr><td><b>Full deletion</b></td><td>Deleting a process removes its recordings, transcripts, maps and revisions permanently, after a type-to-confirm step.</td></tr>
+    <tr><td><b>Activity log</b></td><td>Records who uploaded, edited, settled, exported or deleted what, and when. It never records what was said in a meeting.</td></tr>
+    <tr><td><b>Access keys</b></td><td>Access is by keys issued per person or integration. Each can be revoked at once, and only a scrambled (hashed) form of each key is stored.</td></tr>
+    <tr><td><b>Usage limits</b></td><td>Limits on requests and monthly processing per organisation keep costs predictable.</td></tr>
+    <tr><td><b>Choice of AI provider</b></td><td>The AI provider is a configuration setting. Switching to Azure OpenAI, so that data stays inside the company's own cloud tenancy, requires no code changes.</td></tr>
+  </table>
+  <div class="callout plain keep">
+    <p><b>Where meeting data goes.</b> Transcripts are sent to the configured AI provider to be read; recordings are sent to a transcription service when no transcript is available. Nothing else leaves the system. Which provider is acceptable is a decision for the business and its data-protection lead (see the asks in Section I).</p>
+  </div>
+</section>
+
+<!-- ============ VI. EVIDENCE ============ -->
+<section>
+  <h2><span class="num">vi.</span>Evidence: what has and hasn't been measured</h2>
+  <p>We have tried to be precise about what this proof of concept proves. It is useful to separate the system into two parts: <b>reading the meeting</b> (the AI's job: deciding what the steps, owners and decisions are) and <b>everything after that</b> (merging, finding disagreements, checking, drawing, editing, exporting), which is ordinary, predictable software.</p>
+
+  <h3>Measured</h3>
+  <table>
+    <tr><th>What</th><th>How</th><th>Result</th></tr>
+    <tr><td>The application works end to end</td><td>133 automated checks, including a browser test that signs in, uploads two meetings, settles a disagreement, edits by chat, recovers from a simultaneous edit and creates an access key</td><td class="n">All pass</td></tr>
+    <tr><td>Exported files meet the BPMN 2.0 standard</td><td>Every generated file is checked automatically against the official BPMN 2.0 schema</td><td class="n">All pass</td></tr>
+    <tr><td>Merging meetings: same steps recognised, no duplicates</td><td>Two test processes with known correct answers, merge step only</td><td class="n">100% · 0 duplicates</td></tr>
+    <tr><td>Merging meetings: disagreements found</td><td>Same two processes, four planted contradictions (owner, two thresholds, step order)</td><td class="n">4 of 4 found</td></tr>
+  </table>
+  <p class="muted">The merge results come from just two small test cases written by the team, and they used a simple word-matching method in place of the AI similarity model that live runs would use. They show the logic works as designed; they are not a measure of real-world accuracy.</p>
+
+  <h3>Not yet measured</h3>
+  <table>
+    <tr><th>What</th><th>Why not yet</th><th>What it needs</th></tr>
+    <tr><td><b>How accurately the AI reads real meetings</b> (steps found, owners right, decisions right)</td><td>No AI provider has been connected in this environment yet, and only two synthetic test meetings exist</td><td>Provider access plus 15–20 real meetings with trusted maps</td></tr>
+    <tr><td>Transcription quality on real recordings</td><td>A comparison tool is built, but it has only been run on a one-minute sample</td><td>A handful of real recordings with checked transcripts</td></tr>
+    <tr><td>Opening the export in Camunda Modeler and Signavio</td><td>The files pass the official standard; opening them in the actual products is a manual check that hasn't been done</td><td>Half a day with each tool</td></tr>
+    <tr><td>Time saved for analysts</td><td>Requires real use</td><td>The pilot (Section VII)</td></tr>
+  </table>
+  <div class="callout keep">
+    <p>The evaluation tooling is already built. Once there is provider access and a set of real meetings, a single command scores the AI's maps against the trusted ones and produces a comparable report each time the prompts or model are changed.</p>
+  </div>
+</section>
+
+<!-- ============ VII. LIMITS & ROADMAP ============ -->
+<section>
+  <h2><span class="num">vii.</span>Current limitations and the road ahead</h2>
+  <h3>Limitations today</h3>
+  <ul>
+    <li><b>AI accuracy is unproven on real meetings.</b> This is the main open question (Section VI).</li>
+    <li><b>English only.</b> Other languages have not been tried.</li>
+    <li><b>Sign-in is by access key.</b> There are no individual user accounts, roles or company single sign-on (SSO) yet, and no billing.</li>
+    <li><b>Not yet deployed for others to use.</b> It runs in a local environment and has not been load-tested or security-reviewed by a third party.</li>
+    <li><b>Messy real conversations</b> (people talking over each other, processes described out of order, long tangents) are untested. The two sample meetings are short and orderly.</li>
+    <li><b>Recordings rely on an external transcription service</b>, and how well speakers are told apart depends on that service. Platform transcripts from Teams, Zoom or Meet remain the better input.</li>
+  </ul>
+
+  <h3>Proposed next steps</h3>
+  <table>
+    <tr><th style="width: 23%">Phase</th><th>Work</th><th style="width: 30%">Decision point</th></tr>
+    <tr><td><b>1. Measure</b><br /><span class="muted">2–3 weeks</span></td><td>Connect the approved AI provider. Collect 15–20 real meetings with trusted maps. Score accuracy, tune the instructions, and repeat. Check the exports in Camunda and Signavio.</td><td>Is the draft good enough that correcting it is faster than drawing from scratch?</td></tr>
+    <tr><td><b>2. Harden</b><br /><span class="muted">3–4 weeks</span></td><td>User accounts with company sign-on, roles (editor or reviewer), hosting in the company's cloud, and a security review.</td><td>Security and data-protection sign-off</td></tr>
+    <tr><td><b>3. Pilot</b><br /><span class="muted">4 weeks</span></td><td>One team maps two or three real processes. Track the time taken against their usual method, how many corrections were needed, and whether reviewers trusted the quotes.</td><td>Roll out, extend, or stop</td></tr>
+  </table>
+  <p>Durations are estimates. Each phase ends with a clear decision, so the investment can be stopped early if accuracy on real meetings falls short.</p>
+</section>
+
+<!-- ============ APPENDIX ============ -->
+<section>
+  <h2><span class="num">A.</span>Appendix: glossary and supported formats</h2>
+  <table>
+    <tr><th style="width: 28%">Term</th><th>Meaning</th></tr>
+    <tr><td><b>BPMN 2.0</b></td><td>Business Process Model and Notation: the international standard for drawing business processes, readable by most process-management tools.</td></tr>
+    <tr><td><b>Process map</b></td><td>A diagram of the steps in a process, who does them, and the decisions that change the path.</td></tr>
+    <tr><td><b>Lane</b></td><td>A horizontal band on the map for one team or role. Each step sits in the lane of whoever does it.</td></tr>
+    <tr><td><b>Decision (gateway)</b></td><td>A diamond on the map where the path splits depending on a condition, for example "Amount over $10,000?".</td></tr>
+    <tr><td><b>SOP</b></td><td>Standard operating procedure: a written, step-by-step description of how a process is carried out.</td></tr>
+    <tr><td><b>Point of disagreement</b></td><td>A place where two meetings describe the process differently. The tool lists it for a person to settle rather than choosing for them.</td></tr>
+    <tr><td><b>Revision</b></td><td>A saved state of the map. Every edit and settled point creates a new revision, and any revision can be undone.</td></tr>
+    <tr><td><b>Retention</b></td><td>How long meeting recordings and transcripts are kept before being deleted automatically.</td></tr>
+  </table>
+  <h3>Supported inputs</h3>
+  <table>
+    <tr><th style="width: 28%">Type</th><th>Formats</th></tr>
+    <tr><td>Meeting transcripts</td><td>Teams, Zoom and Meet caption exports (.vtt, .srt), Word documents (.docx), plain text (.txt), with speaker names where present</td></tr>
+    <tr><td>Recordings</td><td>Audio and video (.mp3, .m4a, .wav, .webm, .mp4), transcribed automatically, up to 1 GB per file</td></tr>
+  </table>
+  <h3>Supported outputs</h3>
+  <p>BPMN 2.0 file (.bpmn) · written procedure (Markdown, convertible to Word or PDF) · diagram image (.png, .svg)</p>
+  <p class="muted" style="margin-top: 8mm">All screenshots and diagrams in this report were taken from the running proof of concept on 16 October 2026, using the sample meetings shown in Section III.</p>
+</section>
+
+</body>
+</html>
