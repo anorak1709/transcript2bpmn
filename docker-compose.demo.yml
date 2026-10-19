@@ -1,0 +1,16 @@
+# Demo mode: explore the seeded demo data with no AI calls, so no API credits are spent.
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
+# Keys are blanked and AI endpoints point at a closed local port, so even an attempted call
+# (a new upload, a chat edit) fails locally instead of reaching a provider. .env is untouched.
+x-no-ai: &no_ai
+  LLM_API_KEY: ""
+  LLM_API_BASE: http://127.0.0.1:9
+  TRANSCRIBE_API_KEY: ""
+  TRANSCRIBE_API_BASE: http://127.0.0.1:9
+  DEEPGRAM_API_KEY: ""
+
+services:
+  api:
+    environment: *no_ai
+  worker:
+    environment: *no_ai
