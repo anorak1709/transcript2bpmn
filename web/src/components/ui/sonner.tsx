@@ -10,7 +10,7 @@ const Toaster = ({ ...props }: ToasterProps) => (
       success: <Check className="size-4" aria-hidden />,
       info: <Info className="size-4" aria-hidden />,
       warning: <TriangleAlert className="size-4" aria-hidden />,
-      error: <X className="size-4 text-bad" aria-hidden />,
+      error: <X className="size-4 text-oxblood" aria-hidden />,
       loading: <Contrast className="size-4" aria-hidden />,
     }}
     style={
@@ -21,7 +21,7 @@ const Toaster = ({ ...props }: ToasterProps) => (
         "--border-radius": "var(--radius)",
       } as React.CSSProperties
     }
-    toastOptions={{ classNames: { toast: "cn-toast font-sans", description: "!text-fg-muted" } }}
+    toastOptions={{ classNames: { toast: "cn-toast font-sans", description: "!text-graphite" } }}
     {...props}
   />
 )

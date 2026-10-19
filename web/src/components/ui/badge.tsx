@@ -8,10 +8,10 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "border-fg bg-fg text-app",
-        secondary: "border-line bg-raised text-fg",
-        destructive: "border-bad/40 bg-bad-tint text-bad",
-        outline: "border-control text-fg",
+        default: "border-ink bg-ink text-paper",
+        secondary: "border-hairline bg-paper-shade text-ink",
+        destructive: "border-oxblood/40 bg-oxblood-tint text-oxblood",
+        outline: "border-control text-ink",
         ghost: "hover:bg-muted hover:text-muted-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },

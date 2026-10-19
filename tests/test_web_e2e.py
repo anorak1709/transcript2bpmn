@@ -106,16 +106,16 @@ def test_main_workflow_in_the_browser(server: str) -> None:
 
         # Sign in
         page.goto(f"{server}/")
-        expect(page.get_by_role("heading", name="Sign in")).to_be_visible()
+        expect(page.get_by_role("heading", name="Transcript to BPMN")).to_be_visible()
         page.get_by_label("API key").fill("t2b_wrong_key")
         page.get_by_role("button", name="Open the workspace").click()
         expect(page.get_by_text("That key isn't valid or was revoked.")).to_be_visible()
         page.get_by_label("API key").fill(t.key)
         page.get_by_role("button", name="Open the workspace").click()
 
-        # Inbox -> project (via the sidebar)
-        expect(page.get_by_role("heading", name="Inbox")).to_be_visible()
-        # The design system is what's actually rendered (MASTER.md): slate, Inter, teal.
+        # Projects list -> project
+        expect(page.get_by_role("heading", name="Processes")).to_be_visible()
+        # The design system is what's actually rendered (MASTER.md): paper, ink, serif, oxblood.
         style = page.evaluate(
             """() => {
               const cs = (el) => getComputedStyle(el)
@@ -126,14 +126,13 @@ def test_main_workflow_in_the_browser(server: str) -> None:
                        primary: cs(primary).backgroundColor }
             }"""
         )
-        assert style["bg"] == "rgb(17, 19, 24)" and style["primary"] == "rgb(45, 212, 191)", style
-        assert "Inter" in style["h1"] and "Inter" in style["body"], style
-        page.keyboard.press("Tab")  # keyboard focus shows the 2px teal ring
+        assert style["bg"] == "rgb(21, 19, 17)" and style["primary"] == "rgb(139, 46, 42)", style
+        assert "EB Garamond" in style["h1"] and "Lato" in style["body"], style
+        page.keyboard.press("Tab")  # keyboard focus shows the 2px (lifted) oxblood ring
         ring = page.evaluate("() => getComputedStyle(document.activeElement).outlineColor")
-        assert ring == "rgb(45, 212, 191)", ring
+        assert ring == "rgb(212, 113, 106)", ring
         page.get_by_role("link", name="Invoices").click()
         expect(page.get_by_role("heading", name="Invoices")).to_be_visible()
-        page.get_by_role("tab", name=re.compile(r"^Sources")).click()
 
         # Upload meeting 1: UI uploads + enqueues, status goes live
         page.locator("#upload-meeting").set_input_files(str(CASE / "transcript_1.vtt"))
@@ -147,8 +146,6 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         page.locator("#upload-meeting").set_input_files(str(CASE / "transcript_2.txt"))
         expect(page.get_by_role("cell", name=re.compile(r"^transcript_2\.txt"))).to_be_visible()
         _process_latest(t, "transcript_2.txt", "model_2.json")
-        expect(page.get_by_text("Done")).to_have_count(2, timeout=10_000)
-        page.get_by_role("tab", name=re.compile(r"^Review")).click()
         expect(page.get_by_role("button", name="Settle as Treasury")).to_be_visible(timeout=10_000)
         page.screenshot(path=str(SHOTS / "e2e-project.png"))
 
@@ -159,7 +156,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         expect(page.get_by_text(re.compile(r"^v2 ·"))).to_be_visible()
 
         # Apply a conflict option from the Questions tab
-        page.get_by_role("tab", name=re.compile(r"^Questions")).click()
+        page.get_by_role("tab", name="Questions (3)").click()
         page.get_by_role("button", name="Settle as Treasury").click()
         expect(page.get_by_text("Applied to the map")).to_be_visible()
         expect(page.get_by_text(re.compile(r"^v3 ·"))).to_be_visible()

@@ -4,7 +4,6 @@ import type {
   ChatResult,
   Conflict,
   Gap,
-  InboxItem,
   Job,
   MapVersion,
   ProcessMap,
@@ -99,7 +98,6 @@ export const api = {
   usage: () => request<Usage>("GET", "/usage"),
 
   projects: () => request<Project[]>("GET", "/projects"),
-  inbox: () => request<InboxItem[]>("GET", "/inbox"),
   project: (id: string) => request<Project>("GET", `/projects/${id}`),
   createProject: (name: string, retentionDays: number | null) =>
     request<Project>("POST", "/projects", json({ name, retention_days: retentionDays }), "application/json"),

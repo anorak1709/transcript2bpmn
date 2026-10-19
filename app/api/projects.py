@@ -15,7 +15,7 @@ from app.agenda import build_agenda
 from app.audit import audit
 from app.auth import DB, CurrentPrincipal
 from app.core.config import get_settings
-from app.db.models import AuditLog, Conflict, Job, MapVersion, Organization, ProcessMap, Project, Signoff, Transcript
+from app.db.models import AuditLog, Conflict, Job, MapVersion, Organization, ProcessMap, Project, Transcript
 from app.models.process import ProcessModel
 from app.pipeline import ingest
 from app.pipeline.edit import AnyOp, ResolveOpenQuestion, apply_ops
@@ -465,58 +465,6 @@ def resolve_conflict(
     )  # fmt: skip
     db.commit()
     return _conflict_out(c, insights.segment_index(db, c.project_id))
-
-
-class InboxItem(BaseModel):
-    kind: Literal["disagreement", "policy", "gap", "signoff", "failed"]
-    project_id: str
-    project_name: str
-    ref: str | None  # D1 / P1 / G1, as the process page shows them
-    title: str
-    detail: str | None
-    at: datetime | None
-    tab: str  # where it's settled: review | sources | signoff
-
-
-@router.get("/inbox")
-def inbox(db: DB) -> list[InboxItem]:
-    """Everything waiting on someone, across all processes: open disagreements and policy
-    differences, gaps, sign-offs that came back, and files that failed to process."""
-    items: list[InboxItem] = []
-    for p in db.scalars(select(Project).order_by(Project.created_at)):
-
-        def add(
-            kind: str, ref: str | None, title: str, detail: str | None, at: datetime | None, tab: str, p: Project = p
-        ) -> None:
-            items.append(
-                InboxItem.model_validate(
-                    {"kind": kind, "project_id": p.id, "project_name": p.name, "ref": ref, "title": title,
-                     "detail": detail, "at": at, "tab": tab}
-                )
-            )  # fmt: skip
-
-        open_ = db.scalars(
-            select(Conflict).where(Conflict.project_id == p.id, Conflict.status == "open").order_by(Conflict.created_at)
-        ).all()
-        for origin, prefix, kind in (("meeting", "D", "disagreement"), ("policy", "P", "policy")):
-            for k, c in enumerate((c for c in open_ if c.origin == origin), 1):
-                add(kind, f"{prefix}{k}", c.description, None, c.created_at, "review")
-        for k, g in enumerate(_gaps(db, p), 1):
-            add("gap", f"G{k}", g.description, g.question, None, "review")
-        for s in db.scalars(select(Signoff).where(Signoff.project_id == p.id, Signoff.decision.is_not(None))):
-            word = "approved their part" if s.decision == "approved" else "asked for changes"
-            add("signoff", None, f"{s.name} {word}", s.comment, s.decided_at, "signoff")
-        transcripts = db.scalars(select(Transcript).where(Transcript.project_id == p.id)).all()
-        latest: dict[str, Job] = {}
-        for job in db.scalars(
-            select(Job).where(Job.transcript_id.in_([t.id for t in transcripts])).order_by(Job.created_at)
-        ):
-            latest[job.transcript_id] = job  # ordered by time: the last one wins
-        for t in transcripts:
-            last = latest.get(t.id)
-            if last and last.status == "failed":
-                add("failed", None, f"{t.filename} failed to process", last.error, last.updated_at, "sources")
-    return items
 
 
 class UsageOut(BaseModel):

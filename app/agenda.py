@@ -15,6 +15,14 @@ from app.pipeline.gaps import Gap
 EVERYONE = "Everyone"
 
 
+def _roman(n: int) -> str:
+    out = ""
+    for v, r in ((10, "x"), (9, "ix"), (5, "v"), (4, "iv"), (1, "i")):
+        while n >= v:
+            out, n = out + r, n - v
+    return out
+
+
 def _who(quotes: list[Quote]) -> str:
     names = people(quotes)
     return " and ".join([", ".join(names[:-1]), names[-1]] if len(names) > 2 else names) or EVERYONE
@@ -69,24 +77,23 @@ def build_agenda(
     cites = {n.id: n.source_segment_ids for n in model.nodes} if model else {}
 
     items: dict[str, list[str]] = defaultdict(list)
-    # The same ids the app shows: D1… disagreements, P1… policy differences, G1… gaps.
     point = policy_no = 0
     for c, ss in conflicts:
         if c.origin == "policy":
             policy_no += 1
-            ref = f"P{policy_no}"
+            ref = f"policy difference {policy_no}"
         else:
             point += 1
-            ref = f"D{point}"
+            ref = f"point {_roman(point)}"
         who = _who([q for s in ss for q in s.quotes])
         items[who].append(f"{_conflict_question(c, ss, names)} _({ref})_")
 
-    for k, g in enumerate(gaps, 1):
+    for g in gaps:
         quotes = [index[s] for nid in g.node_ids for s in cites.get(nid, []) if s in index]
         who = _who(quotes)
         if who == EVERYONE and node_lane.get(g.node_ids[0]):
             who = f"Whoever leads {node_lane[g.node_ids[0]]}"
-        items[who].append(f"{g.question} _(G{k})_")
+        items[who].append(f"{g.question} _(gap)_")
 
     for q in model.open_questions if model else []:
         if q.id.startswith("conflict_"):
