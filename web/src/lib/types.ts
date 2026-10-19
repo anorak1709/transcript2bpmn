@@ -234,3 +234,14 @@ export const ACTIVE_STATUSES: JobStatus[] = [
 ]
 
 export const isActive = (job: Job | null) => !!job && ACTIVE_STATUSES.includes(job.status)
+
+export interface InboxItem {
+  kind: "disagreement" | "policy" | "gap" | "signoff" | "failed"
+  project_id: string
+  project_name: string
+  ref: string | null // D1 / P1 / G1
+  title: string
+  detail: string | null
+  at: string | null
+  tab: "review" | "sources" | "signoff"
+}

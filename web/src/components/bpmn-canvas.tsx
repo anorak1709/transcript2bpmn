@@ -35,7 +35,7 @@ interface Services {
   }
 }
 
-/** A step in dispute, marked on the diagram with its point numeral (e.g. "ii"). */
+/** A step in dispute, marked on the diagram with its id (e.g. "D2"). */
 export interface Dispute {
   nodeId: string
   label: string
@@ -47,21 +47,21 @@ export interface BpmnCanvasHandle {
   zoomToFit(): void
 }
 
-// MASTER "themed to match": light ink on a dark sheet, serif labels (hex: bpmn-js needs literals). Rendering only: the saved
-// XML and server-side exports keep standard BPMN styling.
-const SERIF = '"EB Garamond Variable", "EB Garamond", Georgia, serif'
+// MASTER: the canvas is a light sheet (like the export), Inter labels. Hex because bpmn-js
+// needs literals; the saved XML and server-side exports keep standard BPMN styling.
+const FONT = '"Inter Variable", "Inter", system-ui, sans-serif'
 const THEME = {
-  bpmnRenderer: { defaultFillColor: "#1d1a17", defaultStrokeColor: "#ece6da", defaultLabelColor: "#ece6da" },
+  bpmnRenderer: { defaultFillColor: "#ffffff", defaultStrokeColor: "#111827", defaultLabelColor: "#111827" },
   textRenderer: {
-    defaultStyle: { fontFamily: SERIF, fontSize: 14, fontWeight: 500, lineHeight: 1.15 },
-    externalStyle: { fontFamily: SERIF, fontSize: 13, fontWeight: 500, lineHeight: 1.15 },
+    defaultStyle: { fontFamily: FONT, fontSize: 12, fontWeight: 500, lineHeight: 1.2 },
+    externalStyle: { fontFamily: FONT, fontSize: 11, fontWeight: 500, lineHeight: 1.2 },
   },
 }
 const DISPUTED = "t2b-disputed"
 
-// Labels are measured when drawn, so draw only once the serif has actually loaded.
+// Labels are measured when drawn, so draw only once the font has actually loaded.
 const fontReady: Promise<unknown> = document.fonts
-  ? document.fonts.load(`500 14px ${SERIF}`).catch(() => undefined)
+  ? document.fonts.load(`500 12px ${FONT}`).catch(() => undefined)
   : Promise.resolve()
 
 export const BpmnCanvas = forwardRef<
@@ -85,7 +85,7 @@ export const BpmnCanvas = forwardRef<
 
   const svc = <K extends keyof Services>(name: K): Services[K] => modeler.current!.get(name) as Services[K]
 
-  /** Oxblood outline + numeral on each disputed step (MASTER: the same numeral as the list). */
+  /** Amber outline + id on each disputed step (MASTER: the same D1… id as the review list). */
   const markDisputes = () => {
     if (!modeler.current || !imported.current) return
     const canvas = svc("canvas")
@@ -99,7 +99,7 @@ export const BpmnCanvas = forwardRef<
       const mark = document.createElement("span")
       mark.className = "t2b-dispute-mark"
       mark.textContent = d.label
-      mark.title = `In dispute: point ${d.label}`
+      mark.title = `In dispute: ${d.label}`
       svc("overlays").add(el.id, DISPUTED, { position: { top: -11, right: 12 }, html: mark })
       marked.current.push(el.id)
     }

@@ -93,7 +93,7 @@ def test_agenda_addresses_the_people_who_described_each_step(tenant: TenantCtx) 
     assert "## For Marco and Sana (process owner)" in md
     assert "Who does 'Pay supplier in weekly payment run': Finance or Treasury?" in md
     assert "The process owner's account is Treasury." in md
-    assert "_(point i)_" in md and "_(gap)_" in md
+    assert "_(D1)_" in md and "_(G1)_" in md
     assert "Or does it depend on the case" in md
 
 
@@ -190,3 +190,13 @@ def test_signoff_links_show_only_their_part_and_record_decisions(tenant: TenantC
     assert anon.get(f"/review/{token}").status_code == 410
 
     assert tenant.client.delete(f"/projects/{tenant.project_id}").json()["signoffs"] == 1
+
+
+def test_inbox_lists_open_work_across_processes(tenant: TenantCtx) -> None:
+    merged_project(tenant)
+    items = tenant.client.get("/inbox").json()
+    refs = [i["ref"] for i in items if i["kind"] == "disagreement"]
+    assert refs == ["D1", "D2", "D3"]
+    assert {i["kind"] for i in items} >= {"disagreement", "gap"}
+    assert all(i["project_name"] == "Invoices" and i["tab"] for i in items)
+    assert make_tenant().client.get("/inbox").json() == []  # another org sees none of it

@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client"
 import { createBrowserRouter, Link, Navigate, RouterProvider } from "react-router"
 
 import { AppShell, Page } from "@/components/app-shell"
-import { PageHeader } from "@/components/dossier"
+import { PageHeader } from "@/components/kit"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -14,7 +14,7 @@ import { ApiError } from "@/lib/api"
 import { useApiKey } from "@/lib/auth"
 import { ProjectPage } from "@/pages/project"
 import { ReviewPage } from "@/pages/review"
-import { Projects } from "@/pages/projects"
+import { InboxPage } from "@/pages/inbox"
 import { Settings } from "@/pages/settings"
 import { SignIn } from "@/pages/sign-in"
 
@@ -34,9 +34,9 @@ const MapEditor = lazy(() => import("@/pages/map-editor").then((m) => ({ default
 function NotFound() {
   return (
     <Page>
-      <PageHeader eyebrow="Not found" title="No such page" />
-      <Link to="/projects" className="underline">
-        Back to the index of processes
+      <PageHeader title="No such page" />
+      <Link to="/" className="text-brand underline-offset-4 hover:underline">
+        Back to the inbox
       </Link>
     </Page>
   )
@@ -53,13 +53,13 @@ const router = createBrowserRouter(
     {
       element: <RequireKey />,
       children: [
-        { index: true, element: <Navigate to="/projects" replace /> },
-        { path: "projects", element: <Projects /> },
+        { index: true, element: <InboxPage /> },
+        { path: "projects", element: <Navigate to="/" replace /> }, // the sidebar is the index now
         { path: "projects/:projectId", element: <ProjectPage /> },
         {
           path: "maps/:mapId",
           element: (
-            <Suspense fallback={<Skeleton className="m-6 h-[70svh] rounded-sm bg-paper-shade" />}>
+            <Suspense fallback={<Skeleton className="m-6 h-[70svh] rounded-lg bg-panel" />}>
               <MapEditor />
             </Suspense>
           ),

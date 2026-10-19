@@ -1,71 +1,76 @@
-/* bpmn-js themed as a sheet on paper (MASTER: diagram "themed to match"). */
+/* bpmn-js on a light sheet inside the dark app (MASTER: canvas). diagram-js declares its
+   defaults on .djs-parent (the same element and inner ones), so match all of them. */
 .bpmn-canvas,
 .bpmn-canvas.djs-parent,
 .bpmn-canvas .djs-parent {
-  /* compound selector: diagram-js declares its defaults on .djs-parent (same element) */
-  --canvas-fill-color: var(--paper);
-  --accent-color: var(--oxblood);
-  --element-selected-outline-stroke-color: var(--oxblood);
-  --element-selected-outline-secondary-stroke-color: var(--rule);
-  --element-hover-outline-fill-color: var(--graphite);
-  --lasso-stroke-color: var(--oxblood);
-  --lasso-fill-color: rgba(212, 113, 106, 0.08);
-  --space-tool-crosshair-stroke-color: var(--ink);
-  --search-container-background-color: var(--sheet);
-  --palette-background-color: var(--sheet);
-  --palette-border-color: var(--rule);
-  --palette-entry-color: var(--ink);
-  --palette-entry-hover-color: var(--oxblood);
-  --palette-entry-selected-color: var(--oxblood);
-  --palette-separator-color: var(--hairline);
-  --context-pad-entry-background-color: var(--sheet);
-  --context-pad-entry-hover-background-color: var(--paper-shade);
-  --popup-background-color: var(--sheet);
-  --popup-border-color: var(--rule);
-  --popup-entry-hover-color: var(--paper-shade);
-  background: var(--paper);
-  color: var(--ink);
+  --canvas-fill-color: var(--sheet);
+  --accent-color: #0f766e; /* teal-700: 5.2:1 on the sheet */
+  --element-selected-outline-stroke-color: #0f766e;
+  --element-selected-outline-secondary-stroke-color: #99f6e4;
+  --element-hover-outline-fill-color: #64748b;
+  --lasso-stroke-color: #0f766e;
+  --lasso-fill-color: rgba(15, 118, 110, 0.08);
+  --palette-background-color: #ffffff;
+  --palette-border-color: #e2e8f0;
+  --palette-entry-color: #1f2937;
+  --palette-entry-hover-color: #0f766e;
+  --palette-entry-selected-color: #0f766e;
+  --palette-separator-color: #e2e8f0;
+  --context-pad-entry-background-color: #ffffff;
+  --context-pad-entry-hover-background-color: #f1f5f9;
+  --popup-background-color: #ffffff;
+  --popup-border-color: #e2e8f0;
+  --popup-entry-hover-color: #f1f5f9;
+  --popup-font-family: "Inter Variable", "Inter", system-ui, sans-serif;
+  --search-font-family: "Inter Variable", "Inter", system-ui, sans-serif;
+  background: var(--sheet);
+  color: var(--sheet-ink);
 }
 
 .bpmn-canvas .djs-palette {
-  border-radius: 3px;
-  box-shadow: none;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  top: 12px;
+  left: 12px;
 }
 
 .bpmn-canvas .djs-direct-editing-parent {
-  background-color: var(--sheet) !important;
-  color: var(--ink) !important;
-  font-family: "EB Garamond Variable", "EB Garamond", Georgia, serif !important;
+  font-family: "Inter Variable", "Inter", system-ui, sans-serif !important;
 }
 
-/* A step in dispute: oxblood rule around it. */
+/* A step in dispute: amber outline. */
 .bpmn-canvas .t2b-disputed .djs-visual > :first-child {
-  stroke: var(--oxblood) !important;
-  stroke-width: 2px !important;
+  stroke: #d97706 !important;
+  stroke-width: 2.5px !important;
 }
 
-/* The point's numeral, set like a margin note. */
+/* Its id, as a small chip (dark text on amber: 9.9:1). */
 .t2b-dispute-mark {
   display: inline-block;
-  min-width: 1.4rem;
-  padding: 0 0.4rem;
-  border-radius: 2px;
-  background: var(--oxblood);
-  color: var(--paper);
+  padding: 0 6px;
+  border-radius: 6px;
+  background: #fbbf24;
+  color: #1c1300;
   font:
-    italic 600 14px/1.45 "EB Garamond Variable",
-    "EB Garamond",
-    Georgia,
-    serif;
-  text-align: center;
+    600 11px/18px "Inter Variable",
+    "Inter",
+    system-ui,
+    sans-serif;
+  white-space: nowrap;
   pointer-events: none;
 }
 
-/* Keyboard focus on the canvas uses the design system's ring; no browser default on click. */
 .bpmn-canvas svg:focus {
   outline: none;
 }
 .bpmn-canvas svg:focus-visible {
-  outline: 2px solid var(--oxblood);
+  outline: 2px solid #0f766e;
   outline-offset: -2px;
+}
+
+/* the bpmn.io watermark sits under the floating command bar: lift it out of the way */
+.bpmn-canvas .bjs-powered-by {
+  bottom: auto !important;
+  top: 12px;
+  right: 12px !important;
 }

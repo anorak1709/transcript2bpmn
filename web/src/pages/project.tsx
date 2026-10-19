@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { MoreHorizontal } from "lucide-react"
-import { useState } from "react"
-import { Link, useNavigate, useParams } from "react-router"
+import { Download, FileText, MoreHorizontal, ScrollText } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router"
 import { toast } from "sonner"
 
 import { Page } from "@/components/app-shell"
 import { ConflictPoint, PolicyDifference } from "@/components/conflict-card"
-import { PageHeader, Section, StatusMark } from "@/components/dossier"
-import { AddFiles, Gaps, Signoffs, Speakers } from "@/components/process-file"
+import { Empty, PageHeader, Panel, StatusChip } from "@/components/kit"
+import { ITEM } from "@/lib/items"
+import { AddFiles, Gaps, RequestSignoff, Signoffs, Speakers } from "@/components/process-file"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,8 +27,19 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { api, downloadAgenda, downloadExport } from "@/lib/api"
 import { ACCEPTED_UPLOADS, countOf, formatDay, formatDuration } from "@/lib/format"
 import { isActive, type Project, type Resolution, type Transcript } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
-function MeetingRow({ t, projectId }: { t: Transcript; projectId: string }) {
+const TONE_TEXT: Record<string, string> = { warn: "text-warn", policy: "text-policy", gap: "text-gap" }
+const TABS = ["review", "sources", "signoff", "settings"] as const
+type Tab = (typeof TABS)[number]
+const TAB_LABEL: Record<Tab, string> = {
+  review: "Review",
+  sources: "Sources",
+  signoff: "Sign-off",
+  settings: "Settings",
+}
+
+function FileRow({ t, projectId }: { t: Transcript; projectId: string }) {
   const qc = useQueryClient()
   const process = useMutation({
     mutationFn: () => api.process(t.id),
@@ -36,39 +48,33 @@ function MeetingRow({ t, projectId }: { t: Transcript; projectId: string }) {
   })
   const job = t.latest_job
   const canProcess = !t.content_expired && !isActive(job)
+  const Icon = t.purpose === "policy" ? ScrollText : FileText
   return (
-    <tr className="border-b border-hairline align-baseline">
+    <tr className="align-middle">
       <td className="max-w-0 py-2.5 pr-3">
-        <div className="flex items-baseline gap-2">
-          <span className="serif text-graphite" aria-hidden>
-            ¶
-          </span>
-          <span className="truncate" title={t.filename}>
+        <div className="flex items-center gap-2.5">
+          <Icon className="size-4 shrink-0 text-fg-subtle" aria-hidden />
+          <span className="truncate font-medium" title={t.filename}>
             {t.filename}
           </span>
         </div>
-        {/* the side column is narrow: details go under the name instead of in columns */}
-        <p className="tabular ml-4 hidden text-xs whitespace-nowrap text-graphite lg:block">
-          {t.segment_count != null ? `${t.segment_count} lines` : formatDuration(t.duration_seconds)}
-          {t.created_at ? ` · ${formatDay(t.created_at)}` : ""}
-        </p>
         {job?.status === "failed" && job.error && (
-          <p className="mt-0.5 ml-4 line-clamp-2 text-xs text-graphite">{job.error}</p>
+          <p className="mt-1 ml-6.5 line-clamp-2 text-xs text-bad">{job.error}</p>
         )}
       </td>
-      <td className="tabular hidden py-2.5 pr-3 text-sm whitespace-nowrap text-graphite md:table-cell lg:hidden">
+      <td className="tabular hidden py-2.5 pr-3 whitespace-nowrap text-fg-muted md:table-cell">
         {formatDay(t.created_at)}
       </td>
-      <td className="tabular hidden py-2.5 pr-3 text-sm whitespace-nowrap text-graphite sm:table-cell lg:hidden">
+      <td className="tabular hidden py-2.5 pr-3 whitespace-nowrap text-fg-muted sm:table-cell">
         {t.segment_count != null ? `${t.segment_count} lines` : formatDuration(t.duration_seconds)}
       </td>
-      <td className="w-28 py-2.5 pr-1" aria-live="polite">
-        <StatusMark job={job} expired={t.content_expired} />
+      <td className="py-2.5 pr-1" aria-live="polite">
+        <StatusChip job={job} expired={t.content_expired} />
       </td>
       <td className="w-10 py-1 text-right">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={`Actions for ${t.filename}`}>
+            <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${t.filename}`}>
               <MoreHorizontal aria-hidden />
             </Button>
           </DropdownMenuTrigger>
@@ -90,7 +96,31 @@ function MeetingRow({ t, projectId }: { t: Transcript; projectId: string }) {
   )
 }
 
-function WithdrawFile({ project }: { project: Project }) {
+function FileTable({ files, projectId, caption }: { files: Transcript[]; projectId: string; caption: string }) {
+  return (
+    <table className="mb-4 w-full table-fixed text-sm">
+      <caption className="sr-only">{caption}</caption>
+      <thead>
+        <tr className="border-b border-line text-left text-xs text-fg-muted">
+          <th className="pb-2 font-medium">File</th>
+          <th className="hidden w-32 pb-2 font-medium md:table-cell">Added</th>
+          <th className="hidden w-24 pb-2 font-medium sm:table-cell">Length</th>
+          <th className="w-40 pb-2 font-medium">Status</th>
+          <th className="w-10 pb-2">
+            <span className="sr-only">Actions</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-line">
+        {files.map((t) => (
+          <FileRow key={t.id} t={t} projectId={projectId} />
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function DeleteProcess({ project }: { project: Project }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [typed, setTyped] = useState("")
@@ -98,28 +128,27 @@ function WithdrawFile({ project }: { project: Project }) {
     mutationFn: () => api.deleteProject(project.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] })
+      qc.invalidateQueries({ queryKey: ["inbox"] })
       toast.success(`Deleted "${project.name}"`)
-      navigate("/projects")
+      navigate("/")
     },
     onError: (e) => toast.error(e.message),
   })
   return (
     <AlertDialog onOpenChange={() => setTyped("")}>
       <AlertDialogTrigger asChild>
-        <Button variant="destructive" size="sm">
-          Delete this process…
-        </Button>
+        <Button variant="destructive">Delete this process…</Button>
       </AlertDialogTrigger>
-      <AlertDialogContent className="bg-sheet">
+      <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="text-2xl">Delete “{project.name}”?</AlertDialogTitle>
-          <AlertDialogDescription className="text-graphite">
-            Every recording, transcript, map and version in this file is permanently deleted. The audit log keeps a
-            record that it happened. This can't be undone.
+          <AlertDialogTitle>Delete “{project.name}”?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Every recording, transcript, policy document, map, version and sign-off link in this process is permanently
+            deleted. The audit log keeps a record that it happened. This can't be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <div className="space-y-2">
-          <label htmlFor="confirm-name" className="label block">
+        <div className="space-y-1.5">
+          <label htmlFor="confirm-name" className="eyebrow block">
             Type the process name to confirm
           </label>
           <Input id="confirm-name" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
@@ -127,6 +156,7 @@ function WithdrawFile({ project }: { project: Project }) {
         <AlertDialogFooter>
           <AlertDialogCancel>Keep it</AlertDialogCancel>
           <AlertDialogAction
+            className="bg-bad text-app hover:bg-bad/90"
             disabled={typed !== project.name || del.isPending}
             onClick={(e) => {
               e.preventDefault()
@@ -141,35 +171,15 @@ function WithdrawFile({ project }: { project: Project }) {
   )
 }
 
-function FileTable({ files, projectId, caption }: { files: Transcript[]; projectId: string; caption: string }) {
-  return (
-    <table className="w-full table-fixed text-[0.95rem]">
-      <caption className="sr-only">{caption}</caption>
-      <thead className="sr-only">
-        <tr>
-          <th>File</th>
-          <th>Added</th>
-          <th>Length</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {files.map((t) => (
-          <MeetingRow key={t.id} t={t} projectId={projectId} />
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
 export function ExportMenu({ mapId }: { mapId: string }) {
   const run = (format: "bpmn" | "svg" | "png" | "md") =>
     downloadExport(mapId, format).catch((e: Error) => toast.error(e.message))
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline">Export</Button>
+        <Button variant="outline">
+          <Download aria-hidden /> Export
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={() => run("bpmn")}>BPMN 2.0 file</DropdownMenuItem>
@@ -181,8 +191,21 @@ export function ExportMenu({ mapId }: { mapId: string }) {
   )
 }
 
+function SectionHead({ title, count, hint }: { title: string; count?: number; hint?: string }) {
+  return (
+    <div className="mb-3 flex items-baseline gap-2">
+      <h2 className="text-base font-semibold">{title}</h2>
+      {count != null && <span className="tabular text-sm text-fg-subtle">{count}</span>}
+      {hint && <span className="ml-auto text-xs text-fg-muted">{hint}</span>}
+    </div>
+  )
+}
+
 export function ProjectPage() {
   const { projectId = "" } = useParams()
+  const [params, setParams] = useSearchParams()
+  const { hash } = useLocation()
+  const tab: Tab = (TABS as readonly string[]).includes(params.get("tab") ?? "") ? (params.get("tab") as Tab) : "review"
   const qc = useQueryClient()
   const project = useQuery({
     queryKey: ["project", projectId],
@@ -198,11 +221,25 @@ export function ProjectPage() {
     queryFn: () => api.conflicts(projectId, { status: "open" }),
     enabled: !!project.data?.merged_map_id,
   })
+  const gaps = useQuery({
+    queryKey: ["gaps", projectId, refresh],
+    queryFn: () => api.gaps(projectId),
+    enabled: !!project.data?.merged_map_id,
+  })
+  const signoffs = useQuery({ queryKey: ["signoffs", projectId], queryFn: () => api.signoffs(projectId) })
+
+  // Deep links from the inbox (#D2): scroll once the item has rendered.
+  const ready = !!conflicts.data && !!gaps.data
+  useEffect(() => {
+    if (ready && hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" })
+  }, [ready, hash, tab])
+
   const resolve = async (id: string, how: Resolution) => {
     try {
       await api.resolveConflict(id, how)
       toast.success("option" in how || "variant" in how ? "Applied to the map" : "Marked as settled")
-      await Promise.all(["conflicts", "project", "gaps"].map((k) => qc.invalidateQueries({ queryKey: [k, projectId] })))
+      const keys = [["conflicts", projectId], ["project", projectId], ["gaps", projectId], ["projects"], ["inbox"]]
+      await Promise.all(keys.map((queryKey) => qc.invalidateQueries({ queryKey })))
     } catch (e) {
       toast.error((e as Error).message)
     }
@@ -211,19 +248,19 @@ export function ProjectPage() {
   if (project.isPending) {
     return (
       <Page>
-        <Skeleton className="mb-10 h-16 w-2/3 rounded-sm bg-paper-shade" />
-        <Skeleton className="h-64 rounded-sm bg-paper-shade" />
+        <Skeleton className="mb-6 h-10 w-1/2 rounded-md bg-panel" />
+        <Skeleton className="h-64 rounded-lg bg-panel" />
       </Page>
     )
   }
   if (project.error) {
     return (
       <Page>
-        <PageHeader eyebrow="Process file" title="Not found" />
-        <p className="text-graphite">
+        <PageHeader title="Process not found" />
+        <p className="text-fg-muted">
           It may have been deleted, or it belongs to another workspace.{" "}
-          <Link to="/projects" className="text-ink underline">
-            Back to the index
+          <Link to="/" className="text-brand underline-offset-4 hover:underline">
+            Back to the inbox
           </Link>
         </p>
       </Page>
@@ -235,23 +272,27 @@ export function ProjectPage() {
   const processing = p.transcripts.filter((t) => isActive(t.latest_job)).length
   const points = (conflicts.data ?? []).filter((c) => c.origin === "meeting")
   const differences = (conflicts.data ?? []).filter((c) => c.origin === "policy")
+  const gapList = gaps.data ?? []
+  const pendingSignoffs = (signoffs.data ?? []).filter((s) => s.status === "pending").length
+  const counts: Record<Tab, number | null> = {
+    review: p.merged_map_id ? points.length + differences.length + gapList.length : null,
+    sources: p.transcripts.length,
+    signoff: signoffs.data?.length ?? null,
+    settings: null,
+  }
+  const go = (t: Tab) => setParams(t === "review" ? {} : { tab: t }, { replace: true })
 
   return (
     <Page>
       <PageHeader
-        eyebrow={
-          <Link to="/projects" className="hover:text-ink">
-            ← Index of processes
-          </Link>
-        }
         title={p.name}
-        revision={
+        meta={
           <>
             {countOf(meetings.length, "meeting")}
             {policies.length ? ` · ${countOf(policies.length, "policy document").toLowerCase()}` : ""}
-            {p.revised_at ? ` · revised ${formatDay(p.revised_at)}` : ""}
             {p.map_version ? ` · v${p.map_version}` : ""}
-            {p.retention_days ? ` · meeting content kept ${p.retention_days} days` : ""}
+            {p.revised_at ? ` · revised ${formatDay(p.revised_at)}` : ""}
+            {processing ? ` · processing ${countOf(processing, "file").toLowerCase()}…` : ""}
           </>
         }
         actions={
@@ -272,110 +313,219 @@ export function ProjectPage() {
         }
       />
 
-      <div className="grid gap-x-14 gap-y-12 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="min-w-0 space-y-12">
-          <Section
-            title="Points of disagreement"
-            id="disagreements"
-            aside={points.length ? `${points.length} open` : undefined}
-          >
-            {!p.merged_map_id ? (
-              <p className="py-2 text-sm text-graphite">Listed here once a second meeting is merged.</p>
-            ) : conflicts.isPending ? (
-              <Skeleton className="h-24 rounded-sm bg-paper-shade" />
-            ) : points.length ? (
-              <div className="divide-y divide-hairline">
-                {points.map((c, i) => (
-                  <ConflictPoint key={c.id} number={i + 1} conflict={c} onResolve={(how) => resolve(c.id, how)} />
-                ))}
-              </div>
-            ) : (
-              <p className="serif py-2 text-[1.05rem] text-graphite italic">The meetings agree. Nothing to settle.</p>
+      <div role="tablist" aria-label="Process" className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            role="tab"
+            id={`tab-${t}`}
+            type="button"
+            aria-selected={tab === t}
+            aria-controls={`panel-${t}`}
+            onClick={() => go(t)}
+            className={cn(
+              "transition-quiet -mb-px inline-flex h-10 items-center gap-2 border-b-2 px-3 text-sm whitespace-nowrap",
+              tab === t ? "border-brand font-medium text-fg" : "border-transparent text-fg-muted hover:text-fg",
             )}
-          </Section>
-
-          {policies.length > 0 && (
-            <Section
-              title="Against the policy"
-              id="policy"
-              aside={differences.length ? `${differences.length} open` : undefined}
-            >
-              {differences.length ? (
-                <div className="divide-y divide-hairline">
-                  {differences.map((c, i) => (
-                    <PolicyDifference key={c.id} number={i + 1} conflict={c} onResolve={(how) => resolve(c.id, how)} />
-                  ))}
-                </div>
-              ) : (
-                <p className="serif py-2 text-[1.05rem] text-graphite italic">
-                  {processing ? "Comparing…" : "What people said matches the policy."}
-                </p>
-              )}
-            </Section>
-          )}
-
-          {p.merged_map_id && (
-            <Section title="Gaps" id="gaps" aside="What nobody said">
-              <Gaps projectId={p.id} refresh={refresh} />
-            </Section>
-          )}
-        </div>
-
-        <div className="min-w-0 space-y-12">
-          <Section
-            title="Meetings"
-            id="meetings"
-            aside={
-              <span aria-live="polite">
-                {processing ? `Processing ${countOf(processing, "file").toLowerCase()}…` : "Merged into one map"}
+          >
+            {TAB_LABEL[t]}
+            {counts[t] != null && counts[t]! > 0 && (
+              <span
+                className={cn(
+                  "tabular inline-flex h-5 min-w-5 items-center justify-center rounded-md px-1.5 text-xs font-semibold",
+                  t === "review" ? "bg-warn-tint text-warn" : "bg-raised text-fg-muted",
+                )}
+              >
+                {counts[t]}
               </span>
-            }
-          >
-            {meetings.length === 0 ? (
-              <p className="measure py-4 text-graphite">
-                No meetings yet. Add a transcript or recording and the first draft of the map is made from it.
-              </p>
-            ) : (
-              <FileTable files={meetings} projectId={p.id} caption="Meetings in this process" />
             )}
-            <AddFiles
-              project={p}
-              purpose="meeting"
-              accept={ACCEPTED_UPLOADS}
-              prompt="Drop a recording or transcript to add it."
-              hint=".vtt .srt .txt .docx or .mp3 .m4a .wav .webm .mp4 · processing starts on its own"
-            />
-          </Section>
-
-          <Section title="Policy documents" id="policy-documents" aside="Compared, never merged">
-            {policies.length > 0 && <FileTable files={policies} projectId={p.id} caption="Policy documents" />}
-            <AddFiles
-              project={p}
-              purpose="policy"
-              accept=".docx,.txt"
-              prompt="Add the written SOP or policy to check the map against it."
-              hint=".docx or .txt · differences are listed under “Against the policy”"
-            />
-          </Section>
-
-          <Section title="Speakers" id="speakers" aside="Tag each person's role once">
-            <Speakers projectId={p.id} refresh={merged} />
-          </Section>
-        </div>
+          </button>
+        ))}
       </div>
 
-      {p.merged_map_id && (
-        <Section title="Sign-off" id="signoff" className="mt-12" aside="Each person confirms their part">
-          <Signoffs project={p} />
-        </Section>
-      )}
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+        {tab === "review" &&
+          (!p.merged_map_id ? (
+            <Panel>
+              <Empty title="Nothing to review yet">
+                Add a meeting under Sources. Disagreements appear once a second meeting is merged.
+                <div className="mt-4">
+                  <Button onClick={() => go("sources")}>Add a meeting</Button>
+                </div>
+              </Empty>
+            </Panel>
+          ) : conflicts.isPending ? (
+            <Skeleton className="h-48 rounded-lg bg-panel" />
+          ) : (
+            <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_260px]">
+              <div className="min-w-0 space-y-8">
+                <section aria-labelledby="h-disagreements">
+                  <span id="h-disagreements" className="sr-only">
+                    Disagreements
+                  </span>
+                  <SectionHead
+                    title="Disagreements"
+                    count={points.length}
+                    hint="Where the meetings contradict each other"
+                  />
+                  {points.length ? (
+                    <div className="space-y-3">
+                      {points.map((c, i) => (
+                        <ConflictPoint
+                          key={c.id}
+                          itemId={`D${i + 1}`}
+                          conflict={c}
+                          onResolve={(how) => resolve(c.id, how)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <Panel>
+                      <Empty title="The meetings agree">Nothing to settle.</Empty>
+                    </Panel>
+                  )}
+                </section>
 
-      <footer className="mt-20 flex flex-wrap items-center justify-between gap-4 border-t border-hairline pt-5">
-        <p className="text-sm text-graphite">
-          Withdrawing a process deletes its recordings, transcripts and maps for good.
-        </p>
-        <WithdrawFile project={p} />
-      </footer>
+                {policies.length > 0 && (
+                  <section>
+                    <SectionHead
+                      title="Against the policy"
+                      count={differences.length}
+                      hint="What people said vs. what's written"
+                    />
+                    {differences.length ? (
+                      <div className="space-y-3">
+                        {differences.map((c, i) => (
+                          <PolicyDifference
+                            key={c.id}
+                            itemId={`P${i + 1}`}
+                            conflict={c}
+                            onResolve={(how) => resolve(c.id, how)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <Panel>
+                        <Empty title={processing ? "Comparing…" : "Matches the policy"} />
+                      </Panel>
+                    )}
+                  </section>
+                )}
+
+                <section>
+                  <SectionHead title="Gaps" count={gapList.length} hint="What nobody said" />
+                  {gapList.length ? (
+                    <Gaps gaps={gapList} projectId={p.id} />
+                  ) : (
+                    <Panel>
+                      <Empty title="No gaps found">Every decision has its outcomes and every step has an owner.</Empty>
+                    </Panel>
+                  )}
+                </section>
+              </div>
+
+              <aside className="hidden xl:block">
+                <div className="sticky top-6 space-y-3">
+                  <Panel title="At a glance" bodyClassName="space-y-1 p-2">
+                    {[
+                      { k: ITEM.disagreement, n: points.length, href: "#D1", label: "Disagreements" },
+                      ...(policies.length
+                        ? [{ k: ITEM.policy, n: differences.length, href: "#P1", label: "Policy differences" }]
+                        : []),
+                      { k: ITEM.gap, n: gapList.length, href: "#G1", label: "Gaps" },
+                    ].map(({ k, n, href, label }) => (
+                      <a
+                        key={label}
+                        href={n ? href : undefined}
+                        className={cn(
+                          "flex h-9 items-center gap-2.5 rounded-md px-2 text-sm",
+                          n ? "hover:bg-raised" : "pointer-events-none text-fg-subtle",
+                        )}
+                      >
+                        <k.icon className={cn("size-4", n && TONE_TEXT[k.tone])} aria-hidden />
+                        {label}
+                        <span className="tabular ml-auto text-fg-muted">{n}</span>
+                      </a>
+                    ))}
+                  </Panel>
+                  {pendingSignoffs > 0 && (
+                    <p className="px-1 text-xs text-fg-muted">
+                      {countOf(pendingSignoffs, "sign-off")} awaiting review.{" "}
+                      <button type="button" onClick={() => go("signoff")} className="text-brand hover:underline">
+                        View
+                      </button>
+                    </p>
+                  )}
+                </div>
+              </aside>
+            </div>
+          ))}
+
+        {tab === "sources" && (
+          <div className="space-y-6">
+            <Panel title="Meetings" aside={processing ? "Processing…" : "Merged into one map"} id="h-meetings">
+              {meetings.length > 0 && (
+                <FileTable files={meetings} projectId={p.id} caption="Meetings in this process" />
+              )}
+              <AddFiles
+                project={p}
+                purpose="meeting"
+                accept={ACCEPTED_UPLOADS}
+                prompt="Add a recording or transcript"
+                hint="Drop files here · .vtt .srt .txt .docx or .mp3 .m4a .wav .webm .mp4 · processing starts on its own"
+              />
+            </Panel>
+            <Panel title="Policy documents" aside="Compared with the map, never merged into it" id="h-policies">
+              {policies.length > 0 && <FileTable files={policies} projectId={p.id} caption="Policy documents" />}
+              <AddFiles
+                project={p}
+                purpose="policy"
+                accept=".docx,.txt"
+                prompt="Add the written SOP or policy"
+                hint="Drop files here · .docx or .txt · differences appear under Review"
+              />
+            </Panel>
+            <Panel title="Speakers" aside="Tag each person's role once; it shows next to their quotes" id="h-speakers">
+              <Speakers projectId={p.id} refresh={merged} />
+            </Panel>
+          </div>
+        )}
+
+        {tab === "signoff" && (
+          <Panel title="Sign-off" aside={<RequestSignoff project={p} />} id="h-signoff">
+            <Signoffs project={p} />
+          </Panel>
+        )}
+
+        {tab === "settings" && (
+          <div className="space-y-6">
+            <Panel title="Details" id="h-details">
+              <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-[200px_1fr]">
+                <dt className="text-fg-muted">Name</dt>
+                <dd>{p.name}</dd>
+                <dt className="text-fg-muted">Meeting content kept</dt>
+                <dd>
+                  {p.retention_days
+                    ? `${p.retention_days} days, then recordings and transcript text are deleted (maps are kept)`
+                    : "Until the process is deleted"}
+                </dd>
+                <dt className="text-fg-muted">Map</dt>
+                <dd className="tabular">
+                  {p.map_version ? `v${p.map_version}, revised ${formatDay(p.revised_at)}` : "Not made yet"}
+                </dd>
+              </dl>
+            </Panel>
+            <Panel title="Delete" id="h-danger" className="border-bad/30">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <p className="text-sm text-fg-muted">
+                  Deletes every recording, transcript, policy document and map in this process for good.
+                </p>
+                <DeleteProcess project={p} />
+              </div>
+            </Panel>
+          </div>
+        )}
+      </div>
     </Page>
   )
 }

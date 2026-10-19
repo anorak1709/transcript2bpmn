@@ -1,35 +1,45 @@
-/* Process dossier design system: see design-system/transcript-to-bpmn/MASTER.md.
-   Ink-dark paper, warm light text and a reviewer's oxblood. Dark only. Values are contrast-checked there. */
+/* Design system: see design-system/transcript-to-bpmn/MASTER.md. Modern product UI, dark only:
+   layered slate surfaces, Inter, teal for actions, semantic chips. Contrast is checked there. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/eb-garamond/wght.css";
-@import "@fontsource-variable/eb-garamond/wght-italic.css";
-@import "@fontsource/lato/400.css";
-@import "@fontsource/lato/400-italic.css";
-@import "@fontsource/lato/700.css";
+@import "@fontsource-variable/inter/wght.css";
 
 @theme inline {
-  --font-sans: "Lato", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "EB Garamond Variable", "EB Garamond", Georgia, serif;
-  --font-serif: "EB Garamond Variable", "EB Garamond", Georgia, serif;
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* dossier palette as Tailwind colours: bg-paper, text-graphite, border-hairline, … */
-  --color-paper: var(--paper);
-  --color-sheet: var(--sheet);
-  --color-paper-shade: var(--paper-shade);
-  --color-ink: var(--ink);
-  --color-graphite: var(--graphite);
-  --color-oxblood: var(--oxblood);
-  --color-oxblood-tint: var(--oxblood-tint);
-  --color-oxblood-deep: var(--oxblood-deep);
-  --color-oxblood-deep-hover: var(--oxblood-deep-hover);
-  --color-hairline: var(--hairline);
-  --color-rule: var(--rule);
+  /* surfaces, lines, text */
+  --color-app: var(--app);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-control: var(--control);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-on-brand: var(--on-brand);
+  --color-brand-tint: var(--brand-tint);
+  /* meaning (always with an icon and a word, never colour alone) */
+  --color-ok: var(--ok);
+  --color-ok-tint: var(--ok-tint);
+  --color-bad: var(--bad);
+  --color-bad-tint: var(--bad-tint);
+  --color-warn: var(--warn);
+  --color-warn-tint: var(--warn-tint);
+  --color-policy: var(--policy);
+  --color-policy-tint: var(--policy-tint);
+  --color-gap: var(--gap);
+  --color-gap-tint: var(--gap-tint);
+  /* the diagram's light sheet */
+  --color-sheet: var(--sheet);
+  --color-sheet-ink: var(--sheet-ink);
 
-  /* shadcn semantic tokens mapped onto the dossier palette */
+  /* shadcn semantic tokens mapped onto the palette */
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -49,56 +59,70 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
 
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: var(--radius);
-  --radius-xl: 6px;
-  --radius-2xl: 8px;
-  --radius-3xl: 8px;
-  --radius-4xl: 8px;
+  /* 8px panels, 6px controls */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-3xl: 12px;
+  --radius-4xl: 12px;
 
-  /* minimal motion tokens: enter 150ms, exit 100ms */
   --ease-enter: cubic-bezier(0.2, 0, 0, 1);
-  --duration-enter: 150ms;
-  --duration-exit: 100ms;
+  --duration-enter: 180ms;
+  --duration-exit: 120ms;
 }
 
 :root {
   color-scheme: dark;
 
-  /* contrast on paper: ink 14.9, graphite 7.2, oxblood 5.6, control 4.0; ink on oxblood-deep 6.7 */
-  --paper: #151311;
-  --sheet: #1d1a17;
-  --paper-shade: #26221e;
-  --ink: #ece6da;
-  --graphite: #a8a196;
-  --oxblood: #d4716a; /* text, rules and marks: lifted so it reads on dark */
-  --oxblood-deep: #8b2e2a; /* the brand oxblood, as a filled button behind light text */
-  --oxblood-deep-hover: #9e3732;
-  --oxblood-tint: #33201d;
-  --hairline: #2c2824;
-  --rule: #3b3631;
-  --control: #7a7368;
+  /* contrast vs panel: fg 14.2, fg-muted 7.2, fg-subtle 5.5, brand 9.3, control 3.5 (≥3) */
+  --app: #111318;
+  --panel: #181b21;
+  --raised: #20242c;
+  --line: #2b3039;
+  --line-strong: #3b414d;
+  --control: #69717f;
+  --fg: #e7e9ed;
+  --fg-muted: #a1a8b3;
+  --fg-subtle: #8a92a0;
+  --brand: #2dd4bf;
+  --brand-hover: #5eead4;
+  --on-brand: #062a26; /* 8.3 on brand */
+  --brand-tint: #1b3537;
+  /* chip text on its tint: ok 7.4, bad 5.1, warn 7.6, policy 5.1, gap 5.3 */
+  --ok: #4ade80;
+  --ok-tint: #1f362e;
+  --bad: #f87171;
+  --bad-tint: #37272c;
+  --warn: #fbbf24;
+  --warn-tint: #383221;
+  --policy: #a78bfa;
+  --policy-tint: #2c2b3f;
+  --gap: #94a3b8;
+  --gap-tint: #292e36;
+  --sheet: #f7f8fa;
+  --sheet-ink: #111827; /* 16.7 */
 
-  --background: var(--paper);
-  --foreground: var(--ink);
-  --card: var(--sheet);
-  --card-foreground: var(--ink);
-  --popover: var(--sheet);
-  --popover-foreground: var(--ink);
-  --primary: var(--oxblood-deep); /* scarce: the primary action only */
-  --primary-foreground: var(--ink);
-  --secondary: var(--paper-shade);
-  --secondary-foreground: var(--ink);
-  --muted: var(--paper-shade);
-  --muted-foreground: var(--graphite);
-  --accent: var(--paper-shade); /* shadcn "accent" = hover/selected surface, not the brand accent */
-  --accent-foreground: var(--ink);
-  --destructive: var(--oxblood);
-  --border: var(--hairline);
+  --background: var(--app);
+  --foreground: var(--fg);
+  --card: var(--panel);
+  --card-foreground: var(--fg);
+  --popover: var(--raised);
+  --popover-foreground: var(--fg);
+  --primary: var(--brand);
+  --primary-foreground: var(--on-brand);
+  --secondary: var(--raised);
+  --secondary-foreground: var(--fg);
+  --muted: var(--raised);
+  --muted-foreground: var(--fg-muted);
+  --accent: var(--raised); /* shadcn "accent" = hover/selected surface */
+  --accent-foreground: var(--fg);
+  --destructive: var(--bad);
+  --border: var(--line);
   --input: var(--control);
-  --ring: var(--oxblood);
-  --radius: 4px;
+  --ring: var(--brand);
+  --radius: 8px;
 }
 
 @layer base {
@@ -107,37 +131,34 @@
   }
   html {
     @apply font-sans;
-    font-size: 15px;
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv11", "ss01"; /* Inter: single-storey a, open digits */
   }
   body {
     @apply bg-background text-foreground;
+    font-size: 0.875rem; /* 14px UI text; Tailwind sizes stay on the 16px root */
     line-height: 1.5;
-    font-feature-settings: "kern", "liga";
   }
   h1,
   h2,
   h3 {
-    font-family: var(--font-heading);
-    font-weight: 560;
-    letter-spacing: -0.005em;
-    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.011em;
+    line-height: 1.25;
   }
   ::selection {
-    background: var(--oxblood-tint);
-    color: var(--ink);
+    background: color-mix(in srgb, var(--brand) 35%, transparent);
   }
   button:not(:disabled),
-  [role="button"]:not(:disabled) {
+  [role="button"]:not(:disabled),
+  summary {
     cursor: pointer;
   }
-  /* One visible focus style everywhere: 2px oxblood ring, 2px offset (MASTER: accessibility). */
+  /* One visible focus style everywhere: 2px teal ring, 2px offset. */
   :focus-visible {
-    outline: 2px solid var(--oxblood);
+    outline: 2px solid var(--brand);
     outline-offset: 2px;
   }
-  /* Minimal motion: colour/opacity only; nothing when the user asks for less. */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -150,32 +171,21 @@
 }
 
 @layer utilities {
-  /* Dossier details (MASTER: typography) */
-  .smallcaps {
-    font-variant-caps: all-small-caps;
-    letter-spacing: 0.06em;
-  }
-  .label {
-    font-variant-caps: all-small-caps;
-    letter-spacing: 0.07em;
-    color: var(--graphite);
-    font-weight: 700;
-    font-size: 0.95rem;
-  }
   .tabular {
     font-variant-numeric: tabular-nums;
-  }
-  .serif {
-    font-family: var(--font-serif);
   }
   .measure {
     max-width: 68ch;
   }
-  .rule-under {
-    border-bottom: 1px solid var(--rule);
+  /* Small section/field label: sentence case, medium weight, muted. */
+  .eyebrow {
+    font-size: 0.75rem; /* 12px */
+    font-weight: 500;
+    color: var(--fg-muted);
+    letter-spacing: 0.01em;
   }
   .transition-quiet {
-    transition-property: color, background-color, border-color, opacity;
+    transition-property: color, background-color, border-color, opacity, box-shadow;
     transition-duration: var(--duration-enter);
     transition-timing-function: var(--ease-enter);
   }
