@@ -31,7 +31,7 @@ function Evidence({ sides, ownerSide }: { sides: Side[]; ownerSide: number | nul
           <span className="font-bold text-ink"> · the process owner says {sides[ownerSide].label}</span>
         )}
       </summary>
-      <div className="mt-2 space-y-3 pl-4">
+      <div className="mt-2 space-y-3 border-l border-rule pl-3">
         {sides.map((s, i) =>
           s.quotes.length ? (
             <div key={i}>
@@ -42,10 +42,10 @@ function Evidence({ sides, ownerSide }: { sides: Side[]; ownerSide: number | nul
               <ul className="mt-1 space-y-1.5">
                 {s.quotes.map((q, k) => (
                   <li key={k}>
-                    <span className="text-[0.98rem]">
+                    <span className="serif text-[0.98rem] italic">
                       {q.text ? `“${q.text}”` : "Source text no longer available."}
                     </span>
-                    <span className="ml-1.5 text-xs text-graphite">
+                    <span className="smallcaps ml-1.5 text-xs text-graphite">
                       {q.policy
                         ? `policy · ${q.meeting}`
                         : [
@@ -84,7 +84,7 @@ function VariantForm({
     question.trim() && labels.every((l) => l.trim()) && new Set(labels.map((l) => l.trim())).size === labels.length
   return (
     <form
-      className="space-y-3 rounded-sm bg-sheet p-3"
+      className="space-y-3 rounded-sm border border-rule bg-sheet p-3"
       onSubmit={async (e) => {
         e.preventDefault()
         if (!ready) return
@@ -169,7 +169,7 @@ export function ConflictPoint({
 
   return (
     <article className={cn("grid grid-cols-[2rem_1fr] gap-x-2 py-4", className)}>
-      <span className="tabular pt-0.5 text-xl leading-none text-oxblood" aria-hidden>
+      <span className="serif tabular pt-0.5 text-xl leading-none text-oxblood" aria-hidden>
         {roman(number)}.
       </span>
       <div className="min-w-0 space-y-2">
@@ -181,12 +181,12 @@ export function ConflictPoint({
           <button
             type="button"
             onClick={onSelect}
-            className="text-left text-[1.08rem] leading-snug hover:underline hover:decoration-1 hover:underline-offset-4"
+            className="serif text-left text-[1.08rem] leading-snug hover:underline hover:decoration-1 hover:underline-offset-4"
           >
             {description}
           </button>
         ) : (
-          <p className="text-[1.08rem] leading-snug">{description}</p>
+          <p className="serif text-[1.08rem] leading-snug">{description}</p>
         )}
         {conflict.sides && <Evidence sides={conflict.sides} ownerSide={conflict.owner_side ?? null} />}
         {variant ? (
@@ -258,7 +258,7 @@ export function PolicyDifference({
   const policySays = conflict.options[1]
   return (
     <article className="grid grid-cols-[2rem_1fr] gap-x-2 py-4">
-      <span className="tabular pt-0.5 text-lg leading-none text-oxblood" aria-hidden>
+      <span className="serif tabular pt-0.5 text-lg leading-none text-oxblood" aria-hidden>
         §{number}
       </span>
       <div className="min-w-0 space-y-2">
@@ -266,7 +266,7 @@ export function PolicyDifference({
           <span className="sr-only">Policy difference {number}: </span>
           {KIND_LABEL[conflict.kind]}
         </h3>
-        <p className="text-[1.08rem] leading-snug">{conflict.description}</p>
+        <p className="serif text-[1.08rem] leading-snug">{conflict.description}</p>
         <Evidence
           sides={conflict.sides.map((s, i) => ({
             ...s,

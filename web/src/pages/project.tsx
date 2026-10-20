@@ -6,7 +6,7 @@ import { toast } from "sonner"
 
 import { Page } from "@/components/app-shell"
 import { ConflictPoint, PolicyDifference } from "@/components/conflict-card"
-import { Fold, PageHeader, StatusMark } from "@/components/dossier"
+import { PageHeader, Section, StatusMark } from "@/components/dossier"
 import { AddFiles, Gaps, Signoffs, Speakers } from "@/components/process-file"
 import {
   AlertDialog,
@@ -40,7 +40,7 @@ function MeetingRow({ t, projectId }: { t: Transcript; projectId: string }) {
     <tr className="border-b border-hairline align-baseline">
       <td className="max-w-0 py-2.5 pr-3">
         <div className="flex items-baseline gap-2">
-          <span className="text-graphite" aria-hidden>
+          <span className="serif text-graphite" aria-hidden>
             ¶
           </span>
           <span className="truncate" title={t.filename}>
@@ -198,14 +198,6 @@ export function ProjectPage() {
     queryFn: () => api.conflicts(projectId, { status: "open" }),
     enabled: !!project.data?.merged_map_id,
   })
-  // Counts for the folded sections (same queries their contents use, so no extra requests).
-  const gaps = useQuery({
-    queryKey: ["gaps", projectId, refresh],
-    queryFn: () => api.gaps(projectId),
-    enabled: !!project.data?.merged_map_id,
-  })
-  const speakers = useQuery({ queryKey: ["speakers", projectId, merged], queryFn: () => api.speakers(projectId) })
-  const signoffs = useQuery({ queryKey: ["signoffs", projectId], queryFn: () => api.signoffs(projectId) })
   const resolve = async (id: string, how: Resolution) => {
     try {
       await api.resolveConflict(id, how)
@@ -280,103 +272,105 @@ export function ProjectPage() {
         }
       />
 
-      <div className="max-w-[880px]">
-        <Fold
-          title="Points of disagreement"
-          count={p.merged_map_id ? points.length : undefined}
-          attention
-          defaultOpen
-          id="disagreements"
-        >
-          {!p.merged_map_id ? (
-            <p className="text-sm text-graphite">Listed here once a second meeting is merged.</p>
-          ) : conflicts.isPending ? (
-            <Skeleton className="h-24 rounded-sm bg-paper-shade" />
-          ) : points.length ? (
-            <div className="divide-y divide-hairline">
-              {points.map((c, i) => (
-                <ConflictPoint key={c.id} number={i + 1} conflict={c} onResolve={(how) => resolve(c.id, how)} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-graphite">The meetings agree. Nothing to settle.</p>
-          )}
-        </Fold>
-
-        {policies.length > 0 && (
-          <Fold
-            title="Against the policy"
-            count={differences.length}
-            attention
-            id="policy"
-            aside="What people said vs. what's written"
+      <div className="grid gap-x-14 gap-y-12 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="min-w-0 space-y-12">
+          <Section
+            title="Points of disagreement"
+            id="disagreements"
+            aside={points.length ? `${points.length} open` : undefined}
           >
-            {differences.length ? (
+            {!p.merged_map_id ? (
+              <p className="py-2 text-sm text-graphite">Listed here once a second meeting is merged.</p>
+            ) : conflicts.isPending ? (
+              <Skeleton className="h-24 rounded-sm bg-paper-shade" />
+            ) : points.length ? (
               <div className="divide-y divide-hairline">
-                {differences.map((c, i) => (
-                  <PolicyDifference key={c.id} number={i + 1} conflict={c} onResolve={(how) => resolve(c.id, how)} />
+                {points.map((c, i) => (
+                  <ConflictPoint key={c.id} number={i + 1} conflict={c} onResolve={(how) => resolve(c.id, how)} />
                 ))}
               </div>
             ) : (
-              <p className="text-graphite">{processing ? "Comparing…" : "What people said matches the policy."}</p>
+              <p className="serif py-2 text-[1.05rem] text-graphite italic">The meetings agree. Nothing to settle.</p>
             )}
-          </Fold>
-        )}
+          </Section>
 
-        {p.merged_map_id && (
-          <Fold title="Gaps" count={gaps.data?.length} id="gaps" aside="What nobody said">
-            <Gaps projectId={p.id} refresh={refresh} />
-          </Fold>
-        )}
-
-        <Fold
-          title="Meetings and files"
-          count={p.transcripts.length}
-          defaultOpen
-          id="meetings"
-          aside={
-            <span aria-live="polite">
-              {processing ? `Processing ${countOf(processing, "file").toLowerCase()}…` : undefined}
-            </span>
-          }
-        >
-          {meetings.length === 0 ? (
-            <p className="mb-4 text-graphite">
-              No meetings yet. Add a transcript or recording and the first draft of the map is made from it.
-            </p>
-          ) : (
-            <FileTable files={meetings} projectId={p.id} caption="Meetings in this process" />
+          {policies.length > 0 && (
+            <Section
+              title="Against the policy"
+              id="policy"
+              aside={differences.length ? `${differences.length} open` : undefined}
+            >
+              {differences.length ? (
+                <div className="divide-y divide-hairline">
+                  {differences.map((c, i) => (
+                    <PolicyDifference key={c.id} number={i + 1} conflict={c} onResolve={(how) => resolve(c.id, how)} />
+                  ))}
+                </div>
+              ) : (
+                <p className="serif py-2 text-[1.05rem] text-graphite italic">
+                  {processing ? "Comparing…" : "What people said matches the policy."}
+                </p>
+              )}
+            </Section>
           )}
-          <AddFiles
-            project={p}
-            purpose="meeting"
-            accept={ACCEPTED_UPLOADS}
-            prompt="Drop a recording or transcript to add it."
-            hint=".vtt .srt .txt .docx or .mp3 .m4a .wav .webm .mp4 · processing starts on its own"
-          />
-          <h3 className="label mt-10 mb-2">Policy documents · compared with the map, never merged into it</h3>
-          {policies.length > 0 && <FileTable files={policies} projectId={p.id} caption="Policy documents" />}
-          <AddFiles
-            project={p}
-            purpose="policy"
-            accept=".docx,.txt"
-            prompt="Add the written SOP or policy to check the map against it."
-            hint=".docx or .txt · differences are listed under “Against the policy”"
-          />
-        </Fold>
 
-        <Fold title="Speakers" count={speakers.data?.length} id="speakers" aside="Tag each person's role once">
-          <Speakers projectId={p.id} refresh={merged} />
-        </Fold>
+          {p.merged_map_id && (
+            <Section title="Gaps" id="gaps" aside="What nobody said">
+              <Gaps projectId={p.id} refresh={refresh} />
+            </Section>
+          )}
+        </div>
 
-        {p.merged_map_id && (
-          <Fold title="Sign-off" count={signoffs.data?.length} id="signoff" aside="Each person confirms their part">
-            <Signoffs project={p} />
-          </Fold>
-        )}
+        <div className="min-w-0 space-y-12">
+          <Section
+            title="Meetings"
+            id="meetings"
+            aside={
+              <span aria-live="polite">
+                {processing ? `Processing ${countOf(processing, "file").toLowerCase()}…` : "Merged into one map"}
+              </span>
+            }
+          >
+            {meetings.length === 0 ? (
+              <p className="measure py-4 text-graphite">
+                No meetings yet. Add a transcript or recording and the first draft of the map is made from it.
+              </p>
+            ) : (
+              <FileTable files={meetings} projectId={p.id} caption="Meetings in this process" />
+            )}
+            <AddFiles
+              project={p}
+              purpose="meeting"
+              accept={ACCEPTED_UPLOADS}
+              prompt="Drop a recording or transcript to add it."
+              hint=".vtt .srt .txt .docx or .mp3 .m4a .wav .webm .mp4 · processing starts on its own"
+            />
+          </Section>
+
+          <Section title="Policy documents" id="policy-documents" aside="Compared, never merged">
+            {policies.length > 0 && <FileTable files={policies} projectId={p.id} caption="Policy documents" />}
+            <AddFiles
+              project={p}
+              purpose="policy"
+              accept=".docx,.txt"
+              prompt="Add the written SOP or policy to check the map against it."
+              hint=".docx or .txt · differences are listed under “Against the policy”"
+            />
+          </Section>
+
+          <Section title="Speakers" id="speakers" aside="Tag each person's role once">
+            <Speakers projectId={p.id} refresh={merged} />
+          </Section>
+        </div>
       </div>
 
-      <footer className="mt-16 flex max-w-[880px] flex-wrap items-center justify-between gap-4">
+      {p.merged_map_id && (
+        <Section title="Sign-off" id="signoff" className="mt-12" aside="Each person confirms their part">
+          <Signoffs project={p} />
+        </Section>
+      )}
+
+      <footer className="mt-20 flex flex-wrap items-center justify-between gap-4 border-t border-hairline pt-5">
         <p className="text-sm text-graphite">
           Withdrawing a process deletes its recordings, transcripts and maps for good.
         </p>

@@ -16,25 +16,13 @@ SOP binder: paper, ink, a reviewer's red pen. Calm and editorial, never "dashboa
 - Theme: **dark only**. No light mode, no theme switcher. Exports (BPMN/SOP/PNG/SVG) stay
   standard light styling; only the on-screen editor is themed.
 
-## Minimal pass (2026-10-20): what changed, chosen by the owner
+## Colour rule (2026-10-20, kept from the minimal pass; everything else is the dossier below)
 
-The tool is used by consultants, mostly alone while preparing, so it should be minimalist.
-Decisions (each picked from options with the ui-ux-pro-max skill):
-
-| Area | Decision |
-|---|---|
-| Starting point | Strip the dossier: keep its bones, remove ornament |
-| Theme | Dark only (unchanged) |
-| Type | **Lato only**; EB Garamond removed. Hierarchy by size and weight; no italics |
-| Colour | **Monochrome + one signal**: greys; primary buttons light-on-dark (ink on paper); focus ring light. Oxblood only for what needs attention: open disagreements and policy differences (their numerals and counts), disputed steps on the diagram, errors, destructive actions |
-| Numbering | Kept: roman numerals for disagreements, § for policy differences, ¶ for files, ? for gaps |
-| Labels | Sentence case, small, muted (no small caps) |
-| Lines | Only where they separate (list rows, under the page title, between folded sections); no boxed panels or decorative rules |
-| Density | Airy page, compact lists |
-| Process page | **One column, progressive**: every section is a row with a count; Points of disagreement and Meetings and files open by default; Against the policy, Gaps, Speakers, Sign-off folded |
-| Editor | **Canvas first**: the diagram fills the width; the side panel opens only for a selected step, Questions (toolbar button with count) or Issues; one-line "Describe a change" under the diagram; Fit, History, Issues in the ⋯ menu |
-
-Where this file below says serif, small caps or oxblood buttons, the table above wins.
+Monochrome + one signal. Primary buttons are light-on-dark (ink #ECE6DA on paper, 14.9:1) and
+the focus ring is ink; the diagram's selection and palette highlights are ink. Oxblood appears
+only on what needs attention: open disagreements and policy differences (numerals and counts),
+disputed steps on the diagram, errors, the "changed elsewhere" banner, destructive actions.
+Where the table below lists oxblood-deep as the primary button, this rule wins.
 
 ## Colour (all contrast measured against paper #151311)
 

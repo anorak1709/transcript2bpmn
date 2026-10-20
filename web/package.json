@@ -13,6 +13,7 @@
     "format:check": "prettier --check src"
   },
   "dependencies": {
+    "@fontsource-variable/eb-garamond": "5.3.0",
     "@fontsource/lato": "5.3.0",
     "@tanstack/react-query": "5.104.0",
     "bpmn-js": "18.29.1",

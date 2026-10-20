@@ -8,7 +8,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // the primary action: light on dark, used once per view (colour is kept for signals)
+        // the primary action: light on dark, used once per view (oxblood is kept for signals)
         // disabled goes neutral, not washed-out pink: "unavailable" must not read as another colour
         default:
           "bg-primary text-primary-foreground hover:bg-ink/85 disabled:border-hairline disabled:bg-paper-shade disabled:text-graphite disabled:opacity-100",

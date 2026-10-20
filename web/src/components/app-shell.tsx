@@ -18,7 +18,7 @@ const NAV = [
   { to: "/settings", label: "Settings" },
 ]
 
-/** Masthead (MASTER: top bar): wordmark, sections, one rule beneath. */
+/** Masthead (MASTER: top bar): serif wordmark, small-caps sections, hairline beneath. */
 export function AppShell() {
   return (
     <div className="flex min-h-svh flex-col bg-paper">
@@ -32,10 +32,10 @@ export function AppShell() {
         <div className="mx-auto flex h-14 max-w-[1120px] items-center gap-3 px-4 sm:gap-8 sm:px-6">
           <NavLink
             to="/projects"
-            className="inline-flex min-h-9 shrink-0 items-center text-[1.15rem] leading-none font-bold tracking-[-0.01em] sm:text-[1.35rem]"
+            className="serif inline-flex min-h-9 shrink-0 items-center text-[1.15rem] leading-none font-[560] tracking-[-0.01em] sm:text-[1.35rem]"
           >
             <span>
-              Transcript <span className="text-graphite">to</span> BPMN
+              Transcript <span className="text-graphite italic">to</span> BPMN
             </span>
           </NavLink>
           <nav aria-label="Main" className="flex items-center gap-0 sm:gap-1">
@@ -45,7 +45,7 @@ export function AppShell() {
                 to={to}
                 className={({ isActive }) =>
                   cn(
-                    "transition-quiet inline-flex h-9 items-center border-b-2 px-2 text-[0.95rem] font-bold",
+                    "smallcaps transition-quiet inline-flex h-9 items-center border-b-2 px-2 text-[0.95rem] font-bold",
                     isActive ? "border-ink text-ink" : "border-transparent text-graphite hover:text-ink",
                   )
                 }
@@ -57,7 +57,12 @@ export function AppShell() {
           <div className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="text-graphite" aria-label="Signed in: account menu">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="smallcaps text-graphite"
+                  aria-label="Signed in: account menu"
+                >
                   <KeyRound aria-hidden /> <span className="hidden sm:inline">Signed in</span>
                 </Button>
               </DropdownMenuTrigger>

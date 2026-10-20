@@ -1,14 +1,18 @@
-/* Minimal dossier: see design-system/transcript-to-bpmn/MASTER.md. Dark, one typeface (Lato),
-   greys only; oxblood is a signal for what needs attention, never decoration or an action colour. */
+/* Process dossier design system: see design-system/transcript-to-bpmn/MASTER.md.
+   Ink-dark paper, warm light text and a reviewer's oxblood. Dark only. Values are contrast-checked there. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@fontsource-variable/eb-garamond/wght.css";
+@import "@fontsource-variable/eb-garamond/wght-italic.css";
 @import "@fontsource/lato/400.css";
+@import "@fontsource/lato/400-italic.css";
 @import "@fontsource/lato/700.css";
 
 @theme inline {
   --font-sans: "Lato", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-sans);
+  --font-heading: "EB Garamond Variable", "EB Garamond", Georgia, serif;
+  --font-serif: "EB Garamond Variable", "EB Garamond", Georgia, serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* dossier palette as Tailwind colours: bg-paper, text-graphite, border-hairline, … */
@@ -116,8 +120,8 @@
   h2,
   h3 {
     font-family: var(--font-heading);
-    font-weight: 700;
-    letter-spacing: -0.01em;
+    font-weight: 560;
+    letter-spacing: -0.005em;
     line-height: 1.2;
   }
   ::selection {
@@ -146,14 +150,23 @@
 }
 
 @layer utilities {
-  /* Section and field labels: sentence case, small, muted (MASTER: labels). */
+  /* Dossier details (MASTER: typography) */
+  .smallcaps {
+    font-variant-caps: all-small-caps;
+    letter-spacing: 0.06em;
+  }
   .label {
+    font-variant-caps: all-small-caps;
+    letter-spacing: 0.07em;
     color: var(--graphite);
     font-weight: 700;
-    font-size: 0.8rem;
+    font-size: 0.95rem;
   }
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+  .serif {
+    font-family: var(--font-serif);
   }
   .measure {
     max-width: 68ch;

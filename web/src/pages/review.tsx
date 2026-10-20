@@ -17,7 +17,7 @@ function Step({ step, number }: { step: ReviewStep; number: number }) {
   )
   return (
     <li className="grid grid-cols-[2rem_1fr] gap-x-2 border-b border-hairline py-4">
-      <span className="tabular pt-0.5 text-lg leading-none text-graphite" aria-hidden>
+      <span className="serif tabular pt-0.5 text-lg leading-none text-graphite" aria-hidden>
         {number}.
       </span>
       <div className="min-w-0 space-y-1.5">
@@ -71,8 +71,8 @@ export function ReviewPage() {
     <div className="min-h-svh bg-paper">
       <header className="border-b border-rule">
         <div className="mx-auto flex h-14 max-w-[820px] items-center px-4 sm:px-6">
-          <span className="text-[1.15rem] leading-none font-bold">
-            Transcript <span className="text-graphite">to</span> BPMN
+          <span className="serif text-[1.15rem] leading-none font-[560]">
+            Transcript <span className="text-graphite italic">to</span> BPMN
           </span>
           <span className="label ml-auto">Review</span>
         </div>
@@ -105,11 +105,11 @@ export function ReviewPage() {
         title={r.process}
         revision={`Your part: ${r.lanes.join(", ")} · map v${r.version} · link open until ${formatDay(r.expires_at)}`}
       />
-      <p className="measure mb-10 text-[1.1rem] leading-relaxed">
+      <p className="measure serif mb-10 text-[1.1rem] leading-relaxed">
         This is how your part of the process was described in meetings. Please check each step: is it right, is it
         complete, is the order correct? Then approve it or say what needs to change.
         {changed && (
-          <span className="mt-2 block text-[0.95rem] text-graphite">
+          <span className="mt-2 block text-[0.95rem] text-graphite not-italic">
             The map has been updated since this link was sent (v{r.requested_version} → v{r.version}); you're seeing the
             latest version.
           </span>

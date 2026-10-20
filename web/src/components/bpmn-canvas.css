@@ -35,10 +35,10 @@
 .bpmn-canvas .djs-direct-editing-parent {
   background-color: var(--sheet) !important;
   color: var(--ink) !important;
-  font-family: "Lato", ui-sans-serif, system-ui, sans-serif !important;
+  font-family: "EB Garamond Variable", "EB Garamond", Georgia, serif !important;
 }
 
-/* A step in dispute: oxblood rule around it (the one colour signal on the canvas). */
+/* A step in dispute: oxblood rule around it. */
 .bpmn-canvas .t2b-disputed .djs-visual > :first-child {
   stroke: var(--oxblood) !important;
   stroke-width: 2px !important;
@@ -53,10 +53,10 @@
   background: var(--oxblood);
   color: var(--paper);
   font:
-    700 11px/18px "Lato",
-    ui-sans-serif,
-    system-ui,
-    sans-serif;
+    italic 600 14px/1.45 "EB Garamond Variable",
+    "EB Garamond",
+    Georgia,
+    serif;
   text-align: center;
   pointer-events: none;
 }

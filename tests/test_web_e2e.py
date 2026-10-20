@@ -115,7 +115,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
 
         # Projects list -> project
         expect(page.get_by_role("heading", name="Processes")).to_be_visible()
-        # The design system is what's actually rendered (MASTER.md): dark paper, Lato only, light primary.
+        # The design system is what's actually rendered (MASTER.md): paper, ink, serif, oxblood.
         style = page.evaluate(
             """() => {
               const cs = (el) => getComputedStyle(el)
@@ -127,7 +127,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
             }"""
         )
         assert style["bg"] == "rgb(21, 19, 17)" and style["primary"] == "rgb(236, 230, 218)", style
-        assert "Lato" in style["h1"] and "Lato" in style["body"] and "Garamond" not in style["h1"], style
+        assert "EB Garamond" in style["h1"] and "Lato" in style["body"], style
         page.keyboard.press("Tab")  # keyboard focus shows the 2px light ring (oxblood is only a signal)
         ring = page.evaluate("() => getComputedStyle(document.activeElement).outlineColor")
         assert ring == "rgb(236, 230, 218)", ring
@@ -155,17 +155,15 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         expect(page.locator('.bpmn-canvas [data-element-id="Node_t_bank"]')).to_be_visible()
         expect(page.get_by_text(re.compile(r"^v2 ·"))).to_be_visible()
 
-        # Canvas first: no side panel until asked. Settle a point from Questions.
-        expect(page.get_by_role("complementary", name="Map details")).to_be_hidden()
-        page.get_by_role("button", name=re.compile(r"^Questions")).click()
+        # Apply a conflict option from the Questions tab
+        page.get_by_role("tab", name="Questions (3)").click()
         page.get_by_role("button", name="Settle as Treasury").click()
         expect(page.get_by_text("Applied to the map")).to_be_visible()
         expect(page.get_by_text(re.compile(r"^v3 ·"))).to_be_visible()
 
         # Select a step on the canvas -> its transcript quotes
-        page.get_by_role("button", name="Close panel").click()  # back to the whole diagram
         page.locator('.bpmn-canvas [data-element-id="Node_t_pay"]').click()
-        expect(page.get_by_role("button", name="Step", exact=True)).to_have_attribute("aria-pressed", "true")
+        page.get_by_role("tab", name="Step").click()
         expect(page.get_by_text("payment run picks it up on Friday")).to_be_visible()
         expect(page.get_by_text("treasury pays the supplier")).to_be_visible()  # second meeting's quote too
 
