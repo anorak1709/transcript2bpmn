@@ -4,19 +4,19 @@
 .bpmn-canvas .djs-parent {
   /* compound selector: diagram-js declares its defaults on .djs-parent (same element) */
   --canvas-fill-color: var(--paper);
-  --accent-color: var(--oxblood);
-  --element-selected-outline-stroke-color: var(--oxblood);
+  --accent-color: var(--ink);
+  --element-selected-outline-stroke-color: var(--ink);
   --element-selected-outline-secondary-stroke-color: var(--rule);
   --element-hover-outline-fill-color: var(--graphite);
-  --lasso-stroke-color: var(--oxblood);
-  --lasso-fill-color: rgba(212, 113, 106, 0.08);
+  --lasso-stroke-color: var(--ink);
+  --lasso-fill-color: rgba(236, 230, 218, 0.06);
   --space-tool-crosshair-stroke-color: var(--ink);
   --search-container-background-color: var(--sheet);
   --palette-background-color: var(--sheet);
   --palette-border-color: var(--rule);
   --palette-entry-color: var(--ink);
-  --palette-entry-hover-color: var(--oxblood);
-  --palette-entry-selected-color: var(--oxblood);
+  --palette-entry-hover-color: var(--ink);
+  --palette-entry-selected-color: var(--ink);
   --palette-separator-color: var(--hairline);
   --context-pad-entry-background-color: var(--sheet);
   --context-pad-entry-hover-background-color: var(--paper-shade);
@@ -35,10 +35,10 @@
 .bpmn-canvas .djs-direct-editing-parent {
   background-color: var(--sheet) !important;
   color: var(--ink) !important;
-  font-family: "EB Garamond Variable", "EB Garamond", Georgia, serif !important;
+  font-family: "Lato", ui-sans-serif, system-ui, sans-serif !important;
 }
 
-/* A step in dispute: oxblood rule around it. */
+/* A step in dispute: oxblood rule around it (the one colour signal on the canvas). */
 .bpmn-canvas .t2b-disputed .djs-visual > :first-child {
   stroke: var(--oxblood) !important;
   stroke-width: 2px !important;
@@ -53,10 +53,10 @@
   background: var(--oxblood);
   color: var(--paper);
   font:
-    italic 600 14px/1.45 "EB Garamond Variable",
-    "EB Garamond",
-    Georgia,
-    serif;
+    700 11px/18px "Lato",
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
   text-align: center;
   pointer-events: none;
 }
@@ -66,6 +66,6 @@
   outline: none;
 }
 .bpmn-canvas svg:focus-visible {
-  outline: 2px solid var(--oxblood);
+  outline: 2px solid var(--ink);
   outline-offset: -2px;
 }

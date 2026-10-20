@@ -34,10 +34,10 @@ export function SignIn() {
     <main className="flex min-h-svh flex-col bg-paper">
       <div className="mx-auto flex w-full max-w-[560px] flex-1 flex-col justify-center px-6 py-16">
         <p className="label mb-6">A process mapping workspace</p>
-        <h1 className="text-[3.5rem] leading-[1.02] tracking-[-0.015em]">
-          Transcript <span className="text-graphite italic">to</span> BPMN
+        <h1 className="text-[2.25rem] leading-tight">
+          Transcript <span className="text-graphite">to</span> BPMN
         </h1>
-        <p className="serif measure mt-4 text-xl leading-snug text-graphite italic">
+        <p className="measure mt-4 text-xl leading-snug text-graphite">
           Meetings, set down as process maps: every step traced to the words that described it.
         </p>
         <hr className="my-10 border-rule" />
@@ -74,7 +74,7 @@ export function SignIn() {
           </div>
         </form>
       </div>
-      <footer className="smallcaps border-t border-hairline px-6 py-4 text-center text-xs text-graphite">
+      <footer className="border-t border-hairline px-6 py-4 text-center text-xs text-graphite">
         BPMN 2.0 · exports for Camunda and Signavio
       </footer>
     </main>

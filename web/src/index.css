@@ -1,18 +1,14 @@
-/* Process dossier design system: see design-system/transcript-to-bpmn/MASTER.md.
-   Ink-dark paper, warm light text and a reviewer's oxblood. Dark only. Values are contrast-checked there. */
+/* Minimal dossier: see design-system/transcript-to-bpmn/MASTER.md. Dark, one typeface (Lato),
+   greys only; oxblood is a signal for what needs attention, never decoration or an action colour. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/eb-garamond/wght.css";
-@import "@fontsource-variable/eb-garamond/wght-italic.css";
 @import "@fontsource/lato/400.css";
-@import "@fontsource/lato/400-italic.css";
 @import "@fontsource/lato/700.css";
 
 @theme inline {
   --font-sans: "Lato", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "EB Garamond Variable", "EB Garamond", Georgia, serif;
-  --font-serif: "EB Garamond Variable", "EB Garamond", Georgia, serif;
+  --font-heading: var(--font-sans);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* dossier palette as Tailwind colours: bg-paper, text-graphite, border-hairline, … */
@@ -86,8 +82,8 @@
   --card-foreground: var(--ink);
   --popover: var(--sheet);
   --popover-foreground: var(--ink);
-  --primary: var(--oxblood-deep); /* scarce: the primary action only */
-  --primary-foreground: var(--ink);
+  --primary: var(--ink); /* the primary action is light-on-dark, not coloured (14.9:1) */
+  --primary-foreground: var(--paper);
   --secondary: var(--paper-shade);
   --secondary-foreground: var(--ink);
   --muted: var(--paper-shade);
@@ -97,7 +93,7 @@
   --destructive: var(--oxblood);
   --border: var(--hairline);
   --input: var(--control);
-  --ring: var(--oxblood);
+  --ring: var(--ink);
   --radius: 4px;
 }
 
@@ -120,21 +116,21 @@
   h2,
   h3 {
     font-family: var(--font-heading);
-    font-weight: 560;
-    letter-spacing: -0.005em;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     line-height: 1.2;
   }
   ::selection {
-    background: var(--oxblood-tint);
+    background: var(--rule);
     color: var(--ink);
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
-  /* One visible focus style everywhere: 2px oxblood ring, 2px offset (MASTER: accessibility). */
+  /* One visible focus style everywhere: 2px light ring, 2px offset (MASTER: accessibility). */
   :focus-visible {
-    outline: 2px solid var(--oxblood);
+    outline: 2px solid var(--ink);
     outline-offset: 2px;
   }
   /* Minimal motion: colour/opacity only; nothing when the user asks for less. */
@@ -150,23 +146,14 @@
 }
 
 @layer utilities {
-  /* Dossier details (MASTER: typography) */
-  .smallcaps {
-    font-variant-caps: all-small-caps;
-    letter-spacing: 0.06em;
-  }
+  /* Section and field labels: sentence case, small, muted (MASTER: labels). */
   .label {
-    font-variant-caps: all-small-caps;
-    letter-spacing: 0.07em;
     color: var(--graphite);
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: 0.8rem;
   }
   .tabular {
     font-variant-numeric: tabular-nums;
-  }
-  .serif {
-    font-family: var(--font-serif);
   }
   .measure {
     max-width: 68ch;

@@ -21,6 +21,7 @@ interface CanvasService {
   viewbox(): Viewbox
   viewbox(box: Viewbox): void
   zoom(level: "fit-viewport" | number): void
+  resized(): void
   scrollToElement(element: DiagramElement): void
   addMarker(id: string, cls: string): void
   removeMarker(id: string, cls: string): void
@@ -47,21 +48,21 @@ export interface BpmnCanvasHandle {
   zoomToFit(): void
 }
 
-// MASTER "themed to match": light ink on a dark sheet, serif labels (hex: bpmn-js needs literals). Rendering only: the saved
+// MASTER "themed to match": light ink on a dark sheet, Lato labels (hex: bpmn-js needs literals). Rendering only: the saved
 // XML and server-side exports keep standard BPMN styling.
-const SERIF = '"EB Garamond Variable", "EB Garamond", Georgia, serif'
+const FONT = '"Lato", ui-sans-serif, system-ui, sans-serif'
 const THEME = {
   bpmnRenderer: { defaultFillColor: "#1d1a17", defaultStrokeColor: "#ece6da", defaultLabelColor: "#ece6da" },
   textRenderer: {
-    defaultStyle: { fontFamily: SERIF, fontSize: 14, fontWeight: 500, lineHeight: 1.15 },
-    externalStyle: { fontFamily: SERIF, fontSize: 13, fontWeight: 500, lineHeight: 1.15 },
+    defaultStyle: { fontFamily: FONT, fontSize: 12, fontWeight: 400, lineHeight: 1.15 },
+    externalStyle: { fontFamily: FONT, fontSize: 11, fontWeight: 400, lineHeight: 1.15 },
   },
 }
 const DISPUTED = "t2b-disputed"
 
-// Labels are measured when drawn, so draw only once the serif has actually loaded.
+// Labels are measured when drawn, so draw only once the font has actually loaded.
 const fontReady: Promise<unknown> = document.fonts
-  ? document.fonts.load(`500 14px ${SERIF}`).catch(() => undefined)
+  ? document.fonts.load(`400 12px ${FONT}`).catch(() => undefined)
   : Promise.resolve()
 
 export const BpmnCanvas = forwardRef<
@@ -116,7 +117,11 @@ export const BpmnCanvas = forwardRef<
       latest.current.onSelect(e.newSelection.length === 1 ? e.newSelection[0].id : null),
     )
     m.on("commandStack.changed", () => latest.current.onChange())
+    // The editor's side panel opens and closes (canvas first): keep the diagram's size in step.
+    const observer = new ResizeObserver(() => (m.get("canvas") as CanvasService).resized())
+    observer.observe(container.current!)
     return () => {
+      observer.disconnect()
       m.destroy()
       modeler.current = null
       imported.current = false

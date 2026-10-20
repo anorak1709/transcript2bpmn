@@ -8,10 +8,10 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // the primary action: oxblood, used once per view
+        // the primary action: light on dark, used once per view (colour is kept for signals)
         // disabled goes neutral, not washed-out pink: "unavailable" must not read as another colour
         default:
-          "bg-primary text-primary-foreground hover:bg-oxblood-deep-hover disabled:border-hairline disabled:bg-paper-shade disabled:text-graphite disabled:opacity-100",
+          "bg-primary text-primary-foreground hover:bg-ink/85 disabled:border-hairline disabled:bg-paper-shade disabled:text-graphite disabled:opacity-100",
         outline: "border-control bg-sheet text-ink hover:bg-paper-shade aria-expanded:bg-paper-shade",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",

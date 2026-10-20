@@ -209,7 +209,7 @@ export function Settings() {
             <dl className="space-y-5">
               <div>
                 <dt className="text-sm text-graphite">Meetings processed</dt>
-                <dd className="serif tabular text-[2.5rem] leading-none">
+                <dd className="tabular text-[2.5rem] leading-none">
                   {usage.data.jobs_this_month}
                   {usage.data.monthly_jobs_quota != null && (
                     <span className="text-2xl text-graphite"> of {usage.data.monthly_jobs_quota}</span>

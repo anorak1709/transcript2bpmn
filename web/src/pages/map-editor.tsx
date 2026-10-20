@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { History, Maximize } from "lucide-react"
+import { History, Maximize, MoreHorizontal, TriangleAlert, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useBlocker, useParams } from "react-router"
 import { toast } from "sonner"
@@ -18,15 +18,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Input } from "@/components/ui/input"
 import { api, downloadText, isStale } from "@/lib/api"
 import { formatDate, formatTimestamp, roman } from "@/lib/format"
 import type { ProcessMap, ProcessNode, Resolution } from "@/lib/types"
+import { cn } from "@/lib/utils"
 import { ExportMenu } from "@/pages/project"
 
 /** Our exports use `Node_<id>`; elements created in the editor keep their bpmn-js id. */
@@ -58,11 +58,7 @@ function SelectedStep({
   points: Map<string, number[]>
 }) {
   if (!xmlId)
-    return (
-      <p className="serif py-2 text-[1.05rem] text-graphite italic">
-        Select a step on the map to read where it came from.
-      </p>
-    )
+    return <p className="py-2 text-[1.05rem] text-graphite">Select a step on the map to read where it came from.</p>
   const nodeId = modelNodeId(map, xmlId)
   const node = map.model.nodes.find((n) => n.id === nodeId)
   if (!node) return <p className="py-2 text-sm text-graphite">Not saved yet. Save to keep this element.</p>
@@ -135,23 +131,27 @@ const SOURCE_LABEL = {
   resolve: "Point settled",
 }
 
-function HistorySheet({ mapId, version }: { mapId: string; version: number }) {
-  const { data, isPending } = useQuery({ queryKey: ["versions", mapId, version], queryFn: () => api.versions(mapId) })
+function HistorySheet({
+  mapId,
+  version,
+  open,
+  onOpenChange,
+}: {
+  mapId: string
+  version: number
+  open: boolean
+  onOpenChange: (v: boolean) => void
+}) {
+  const { data, isPending } = useQuery({
+    queryKey: ["versions", mapId, version],
+    queryFn: () => api.versions(mapId),
+    enabled: open,
+  })
   return (
-    <Sheet>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Version history">
-              <History aria-hidden />
-            </Button>
-          </SheetTrigger>
-        </TooltipTrigger>
-        <TooltipContent>Version history</TooltipContent>
-      </Tooltip>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="bg-paper">
         <SheetHeader>
-          <SheetTitle className="serif text-2xl font-[560]">Revisions</SheetTitle>
+          <SheetTitle className="text-2xl font-bold">Revisions</SheetTitle>
           <SheetDescription className="text-graphite">
             Every change is kept. Undo steps back one at a time.
           </SheetDescription>
@@ -163,15 +163,13 @@ function HistorySheet({ mapId, version }: { mapId: string; version: number }) {
             <ol className="pb-6">
               {[...(data ?? [])].reverse().map((v) => (
                 <li key={v.version} className="grid grid-cols-[3rem_1fr] gap-x-3 border-b border-hairline py-3">
-                  <span className="serif tabular text-lg">v{v.version}</span>
+                  <span className="tabular text-lg">v{v.version}</span>
                   <div>
                     <p className="text-sm font-bold">
                       {SOURCE_LABEL[v.source] ?? v.source}
-                      {v.version === version && (
-                        <span className="smallcaps ml-2 font-normal text-graphite">current</span>
-                      )}
+                      {v.version === version && <span className="ml-2 font-normal text-graphite">current</span>}
                     </p>
-                    {v.instruction && <p className="serif mt-0.5 text-[1.02rem] italic">“{v.instruction}”</p>}
+                    {v.instruction && <p className="mt-0.5 text-[1.02rem]">“{v.instruction}”</p>}
                     <p className="tabular mt-0.5 text-xs text-graphite">{formatDate(v.created_at)}</p>
                   </div>
                 </li>
@@ -190,7 +188,9 @@ export function MapEditor() {
   const canvas = useRef<BpmnCanvasHandle>(null)
   const [dirty, setDirty] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState("step")
+  // Canvas first: the side panel only opens for a selected step, the questions or the issues.
+  const [panel, setPanel] = useState<"step" | "questions" | "issues" | null>(null)
+  const [history, setHistory] = useState(false)
   const [chat, setChat] = useState<ChatLine[]>([])
   const [instruction, setInstruction] = useState("")
   const ignoreNextChange = useRef(false)
@@ -320,7 +320,7 @@ export function MapEditor() {
   const focusNode = (nodeId: string) => {
     if (!canvas.current?.select(`Node_${nodeId}`) && !canvas.current?.select(nodeId))
       toast.info("That step isn't on the diagram")
-    else setTab("step")
+    else setPanel("step")
   }
   const resolve = async (conflictId: string, how: Resolution) => {
     try {
@@ -336,7 +336,7 @@ export function MapEditor() {
   if (query.error || !map) {
     return (
       <div className="measure mx-auto p-10">
-        <p className="serif text-2xl">This map couldn't be opened.</p>
+        <p className="text-2xl">This map couldn't be opened.</p>
         <p className="mt-1 text-graphite">{query.error?.message}</p>
         <Link to="/projects" className="mt-3 inline-block underline">
           Back to the index
@@ -346,35 +346,34 @@ export function MapEditor() {
   }
 
   const questions = map.model.open_questions
+  const reply = [...chat].reverse().find((c) => c.role !== "user")
   return (
     <div className="flex h-[calc(100svh-3.5rem)] flex-col bg-paper">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule px-6 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
         <div className="min-w-0">
-          <Link to={`/projects/${map.project_id}`} className="label inline-flex min-h-7 items-center hover:text-ink">
+          <Link
+            to={`/projects/${map.project_id}`}
+            className="label inline-flex min-h-6 items-center text-graphite hover:text-ink"
+          >
             ← {map.transcript_id == null ? "Process file" : "Meeting map"}
           </Link>
-          <h1 className="truncate text-[1.6rem] leading-tight">{map.model.name}</h1>
+          <h1 className="truncate text-[1.25rem] leading-tight">
+            {map.model.name}
+            <span className="tabular ml-3 text-sm font-normal text-graphite" role="status">
+              v{map.version}
+              {map.transcript_id == null ? " · all meetings" : " · this meeting only"}
+              {dirty && <span className="text-ink"> · unsaved changes</span>}
+            </span>
+          </h1>
         </div>
-        <p className="tabular self-end pb-1 text-sm text-graphite" role="status">
-          v{map.version}
-          {map.transcript_id == null ? " · all meetings" : " · this meeting only"}
-          {dirty && <span className="text-ink"> · unsaved changes</span>}
-        </p>
         <div className="ml-auto flex items-center gap-1.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Fit diagram to screen"
-                onClick={() => canvas.current?.zoomToFit()}
-              >
-                <Maximize aria-hidden />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Fit to screen</TooltipContent>
-          </Tooltip>
-          <HistorySheet mapId={mapId} version={map.version} />
+          <Button
+            variant="ghost"
+            aria-pressed={panel === "questions"}
+            onClick={() => setPanel(panel === "questions" ? null : "questions")}
+          >
+            Questions{questions.length > 0 && <span className="tabular text-oxblood">{questions.length}</span>}
+          </Button>
           <Button variant="outline" onClick={() => undo.mutate()} disabled={!map.can_undo || undo.isPending}>
             {undo.isPending ? "Undoing…" : "Undo"}
           </Button>
@@ -382,14 +381,30 @@ export function MapEditor() {
           <Button onClick={() => save.mutate()} disabled={!dirty || save.isPending}>
             {save.isPending ? "Saving…" : "Save"}
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="More">
+                <MoreHorizontal aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => canvas.current?.zoomToFit()}>
+                <Maximize aria-hidden /> Fit to screen
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setHistory(true)}>
+                <History aria-hidden /> Version history
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setPanel("issues")}>
+                <TriangleAlert aria-hidden /> Issues{map.errors.length ? ` (${map.errors.length})` : ""}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+      <HistorySheet mapId={mapId} version={map.version} open={history} onOpenChange={setHistory} />
 
       {newerElsewhere && dirty && !stale && (
-        <div
-          role="status"
-          className="flex flex-wrap items-center gap-3 border-b border-oxblood/30 bg-oxblood-tint px-6 py-2.5 text-sm"
-        >
+        <div role="status" className="flex flex-wrap items-center gap-3 bg-oxblood-tint px-6 py-2.5 text-sm">
           <span>
             Someone else saved <strong>v{newerElsewhere.version}</strong> while you were editing v{map.version}. Saving
             now would be refused.
@@ -403,155 +418,158 @@ export function MapEditor() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(320px,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-1">
-        <div className="relative min-h-0 border-b border-rule lg:border-r lg:border-b-0">
-          <BpmnCanvas
-            ref={canvas}
-            xml={map.bpmn_xml}
-            disputes={canvasDisputes}
-            onSelect={setSelected}
-            onChange={() => {
-              if (ignoreNextChange.current) ignoreNextChange.current = false
-              else setDirty(true)
-            }}
-            onImportError={(m) => toast.error(`Couldn't display the diagram: ${m}`)}
-          />
-        </div>
-
-        <aside className="flex min-h-0 flex-col bg-paper" aria-label="Map details">
-          {map.diarization_available === false && (
-            <p className="border-b border-hairline px-6 py-3 text-sm">
-              <span className="label mr-1">Note</span> Speakers weren't identified in a recording. Check who does each
-              step.
-            </p>
-          )}
-          <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
-            <TabsList className="mx-6 mt-3 h-auto justify-start gap-5 rounded-none border-b border-hairline bg-transparent p-0">
-              {[
-                ["step", "Step", 0],
-                ["questions", "Questions", questions.length],
-                ["issues", "Issues", map.errors.length],
-              ].map(([value, label, count]) => (
-                <TabsTrigger
-                  key={value}
-                  value={String(value)}
-                  className="smallcaps -mb-px h-9 flex-none rounded-none border-0 border-b-2 border-transparent px-0 font-bold text-graphite data-[state=active]:border-ink data-[state=active]:bg-transparent data-[state=active]:text-ink"
-                >
-                  {label}
-                  {Number(count) > 0 && ` (${count})`}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            <ScrollArea className="min-h-0 flex-1">
-              <div className="px-6 py-5">
-                <TabsContent value="step">
-                  <SelectedStep map={map} xmlId={selected} points={disputes} />
-                </TabsContent>
-                <TabsContent value="questions">
-                  {questions.length === 0 && (
-                    <p className="serif text-[1.05rem] text-graphite italic">No open questions.</p>
-                  )}
-                  <div className="divide-y divide-hairline">
-                    {questions.map((q) => {
-                      const conflict = q.id.startsWith("conflict_") ? conflictsById.get(q.id.slice(9)) : undefined
-                      return conflict ? (
-                        <ConflictPoint
-                          key={q.id}
-                          number={pointOf.get(q.id) ?? 0}
-                          conflict={
-                            evidence.get(conflict.id) ?? {
-                              ...conflict,
-                              description: q.question
-                                .replace(/^Meetings disagree \(\w+\): /, "")
-                                .replace(/ Options: .*$/, ""),
-                            }
-                          }
-                          onResolve={(how) => resolve(conflict.id, how)}
-                          onSelect={q.related_node_ids[0] ? () => focusNode(q.related_node_ids[0]) : undefined}
-                        />
-                      ) : (
-                        <button
-                          key={q.id}
-                          type="button"
-                          disabled={!q.related_node_ids.length}
-                          onClick={() => q.related_node_ids[0] && focusNode(q.related_node_ids[0])}
-                          className="serif block w-full py-4 text-left text-[1.05rem] leading-snug enabled:hover:underline enabled:hover:decoration-1 enabled:hover:underline-offset-4 disabled:cursor-default"
-                        >
-                          {q.question}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </TabsContent>
-                <TabsContent value="issues">
-                  {map.errors.length === 0 && (
-                    <p className="serif text-[1.05rem] text-graphite italic">No structural problems found.</p>
-                  )}
-                  <ol className="divide-y divide-hairline">
-                    {map.errors.map((e, i) => (
-                      <li key={i}>
-                        <button
-                          type="button"
-                          disabled={!e.node_ids.length}
-                          onClick={() => e.node_ids[0] && focusNode(e.node_ids[0])}
-                          className="grid w-full grid-cols-[1.5rem_1fr] py-3 text-left text-sm enabled:hover:bg-paper-shade disabled:cursor-default"
-                        >
-                          <span className="tabular text-graphite">{i + 1}.</span>
-                          {e.message}
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
-                </TabsContent>
-              </div>
-            </ScrollArea>
-          </Tabs>
-
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <div className="flex min-h-[360px] min-w-0 flex-1 flex-col">
+          <div className="relative min-h-0 flex-1 overflow-hidden border-y border-hairline">
+            <BpmnCanvas
+              ref={canvas}
+              xml={map.bpmn_xml}
+              disputes={canvasDisputes}
+              onSelect={(id) => {
+                setSelected(id)
+                if (id) setPanel("step")
+                else setPanel((p) => (p === "step" ? null : p))
+              }}
+              onChange={() => {
+                if (ignoreNextChange.current) ignoreNextChange.current = false
+                else setDirty(true)
+              }}
+              onImportError={(m) => toast.error(`Couldn't display the diagram: ${m}`)}
+            />
+          </div>
           <form
-            className="space-y-2 border-t border-rule bg-sheet px-6 py-4"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 px-6 py-3"
             onSubmit={(e) => {
               e.preventDefault()
               if (instruction.trim() && !send.isPending) send.mutate(instruction.trim())
             }}
           >
-            {chat.length > 0 && (
-              <ol className="max-h-36 space-y-1.5 overflow-y-auto text-sm" aria-live="polite" aria-label="Chat">
-                {chat.map((c, i) => (
-                  <li
-                    key={i}
-                    className={
-                      c.role === "user" ? "text-graphite" : c.role === "error" ? "text-oxblood" : "serif text-[1.02rem]"
-                    }
-                  >
-                    {c.role === "user" ? `You: ${c.text}` : c.text}
-                  </li>
-                ))}
-              </ol>
-            )}
-            <label htmlFor="chat-input" className="label block">
+            <label htmlFor="chat-input" className="sr-only">
               Describe a change
             </label>
-            <div className="flex gap-2">
-              <Textarea
-                id="chat-input"
-                rows={2}
-                className="min-h-0 resize-none"
-                placeholder="e.g. Finance also checks the VAT number before approving"
-                value={instruction}
-                onChange={(e) => setInstruction(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault()
-                    e.currentTarget.form?.requestSubmit()
-                  }
-                }}
-              />
-              <Button type="submit" className="h-auto self-stretch" disabled={!instruction.trim() || send.isPending}>
-                {send.isPending ? "Applying…" : "Apply"}
+            <Input
+              id="chat-input"
+              className="min-w-0 flex-1"
+              placeholder="Describe a change, e.g. Finance also checks the VAT number before approving"
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              autoComplete="off"
+            />
+            <Button type="submit" variant="outline" disabled={!instruction.trim() || send.isPending}>
+              {send.isPending ? "Applying…" : "Apply"}
+            </Button>
+            {reply && (
+              <p
+                aria-live="polite"
+                className={cn("w-full text-sm", reply.role === "error" ? "text-oxblood" : "text-graphite")}
+              >
+                {reply.text}
+              </p>
+            )}
+          </form>
+        </div>
+
+        {panel && (
+          <aside className="flex min-h-0 flex-col border-hairline lg:w-[420px] lg:border-l" aria-label="Map details">
+            <div className="flex items-center gap-1 px-4 pt-3">
+              {(
+                [
+                  ["step", "Step"],
+                  ["questions", "Questions"],
+                  ["issues", "Issues"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={panel === value}
+                  onClick={() => setPanel(value)}
+                  className={cn(
+                    "transition-quiet inline-flex h-8 items-center rounded-sm px-2.5 text-sm",
+                    panel === value ? "bg-paper-shade font-bold text-ink" : "text-graphite hover:text-ink",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-auto"
+                aria-label="Close panel"
+                onClick={() => setPanel(null)}
+              >
+                <X aria-hidden />
               </Button>
             </div>
-          </form>
-        </aside>
+            {map.diarization_available === false && (
+              <p className="px-6 pt-3 text-sm text-graphite">
+                Speakers weren't identified in a recording. Check who does each step.
+              </p>
+            )}
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="px-6 py-5">
+                {panel === "step" && <SelectedStep map={map} xmlId={selected} points={disputes} />}
+                {panel === "questions" && (
+                  <>
+                    {questions.length === 0 && <p className="text-graphite">No open questions.</p>}
+                    <div className="divide-y divide-hairline">
+                      {questions.map((q) => {
+                        const conflict = q.id.startsWith("conflict_") ? conflictsById.get(q.id.slice(9)) : undefined
+                        return conflict ? (
+                          <ConflictPoint
+                            key={q.id}
+                            number={pointOf.get(q.id) ?? 0}
+                            conflict={
+                              evidence.get(conflict.id) ?? {
+                                ...conflict,
+                                description: q.question
+                                  .replace(/^Meetings disagree \(\w+\): /, "")
+                                  .replace(/ Options: .*$/, ""),
+                              }
+                            }
+                            onResolve={(how) => resolve(conflict.id, how)}
+                            onSelect={q.related_node_ids[0] ? () => focusNode(q.related_node_ids[0]) : undefined}
+                          />
+                        ) : (
+                          <button
+                            key={q.id}
+                            type="button"
+                            disabled={!q.related_node_ids.length}
+                            onClick={() => q.related_node_ids[0] && focusNode(q.related_node_ids[0])}
+                            className="block w-full py-4 text-left leading-snug enabled:hover:text-ink disabled:cursor-default"
+                          >
+                            {q.question}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+                {panel === "issues" && (
+                  <>
+                    {map.errors.length === 0 && <p className="text-graphite">No structural problems found.</p>}
+                    <ol className="divide-y divide-hairline">
+                      {map.errors.map((e, i) => (
+                        <li key={i}>
+                          <button
+                            type="button"
+                            disabled={!e.node_ids.length}
+                            onClick={() => e.node_ids[0] && focusNode(e.node_ids[0])}
+                            className="grid w-full grid-cols-[1.5rem_1fr] py-3 text-left text-sm enabled:hover:text-ink disabled:cursor-default"
+                          >
+                            <span className="tabular text-graphite">{i + 1}.</span>
+                            {e.message}
+                          </button>
+                        </li>
+                      ))}
+                    </ol>
+                  </>
+                )}
+              </div>
+            </ScrollArea>
+          </aside>
+        )}
       </div>
 
       <AlertDialog open={!!stale}>

@@ -131,7 +131,7 @@ export function Projects() {
         </p>
       ) : data.length === 0 ? (
         <div className="measure py-10">
-          <p className="serif text-2xl">Nothing on file yet.</p>
+          <p className="text-2xl">Nothing on file yet.</p>
           <p className="mt-2 text-graphite">
             Open a file for a process, then add a meeting transcript or recording. The map is drafted from what was
             said, and every step keeps a reference to the words behind it.
@@ -148,15 +148,15 @@ export function Projects() {
                 to={`/projects/${p.id}`}
                 className="transition-quiet group grid grid-cols-[2.5rem_1fr_auto] items-baseline gap-x-4 px-2 py-5 hover:bg-paper-shade"
               >
-                <span className="serif tabular text-lg text-graphite" aria-hidden>
+                <span className="tabular text-lg text-graphite" aria-hidden>
                   {roman(i + 1)}.
                 </span>
                 <span className="min-w-0">
-                  <span className="serif block truncate text-[1.6rem] leading-tight group-hover:underline group-hover:decoration-1 group-hover:underline-offset-4">
+                  <span className="block truncate text-[1.6rem] leading-tight group-hover:underline group-hover:decoration-1 group-hover:underline-offset-4">
                     {p.name}
                   </span>
                   <span className="tabular mt-1 block text-sm text-graphite">
-                    {countOf(p.transcripts.length, "meeting")}
+                    {countOf(p.transcripts.filter((t) => t.purpose === "meeting").length, "meeting")}
                     {p.revised_at ? ` · revised ${formatDay(p.revised_at)}` : " · no map yet"}
                     {p.map_version ? ` · v${p.map_version}` : ""}
                     {p.retention_days ? ` · content kept ${p.retention_days} days` : ""}

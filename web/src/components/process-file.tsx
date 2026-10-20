@@ -76,7 +76,7 @@ export function AddFiles({
       )}
     >
       <div>
-        <p className="serif text-[1.05rem] italic">{prompt}</p>
+        <p className="text-[1.05rem]">{prompt}</p>
         <p className="text-xs text-graphite">{hint}</p>
       </div>
       <input
@@ -178,18 +178,18 @@ export function Gaps({ projectId, refresh }: { projectId: string; refresh: unkno
   })
   if (!gaps.data) return null
   if (!gaps.data.length) {
-    return <p className="serif py-2 text-[1.05rem] text-graphite italic">No gaps found. Every path has an end.</p>
+    return <p className="py-2 text-[1.05rem] text-graphite">No gaps found. Every path has an end.</p>
   }
   return (
     <ul className="divide-y divide-hairline">
       {gaps.data.map((g) => (
         <li key={g.id} className="grid grid-cols-[2rem_1fr_auto] gap-x-2 py-3">
-          <span className="serif pt-0.5 text-lg leading-none text-graphite" aria-hidden>
+          <span className="pt-0.5 text-lg leading-none text-graphite" aria-hidden>
             ?
           </span>
           <div className="min-w-0">
             <h3 className="label font-sans">{GAP_LABEL[g.kind]}</h3>
-            <p className="serif text-[1.05rem] leading-snug">{g.description}</p>
+            <p className="text-[1.05rem] leading-snug">{g.description}</p>
             <p className="mt-0.5 text-sm text-graphite">Ask: {g.question}</p>
           </div>
           <Button
@@ -315,7 +315,7 @@ function RequestSignoff({ project }: { project: Project }) {
                   <label key={l.id} className="flex items-center gap-2 text-[0.95rem]">
                     <input
                       type="checkbox"
-                      className="size-4 accent-[var(--oxblood)]"
+                      className="size-4 accent-[var(--ink)]"
                       checked={lanes.includes(l.id)}
                       onChange={(e) => setLanes(e.target.checked ? [...lanes, l.id] : lanes.filter((x) => x !== l.id))}
                     />
@@ -390,7 +390,7 @@ export function Signoffs({ project }: { project: Project }) {
                         The map has changed since (now v{s.current_version}).
                       </span>
                     )}
-                    {s.comment && <span className="serif mt-0.5 block text-[0.98rem] italic">“{s.comment}”</span>}
+                    {s.comment && <span className="mt-0.5 block text-[0.98rem]">“{s.comment}”</span>}
                   </td>
                   <td className="py-1 text-right">
                     {(s.status === "pending" || s.status === "approved" || s.status === "changes_requested") && (
