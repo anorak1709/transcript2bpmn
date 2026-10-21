@@ -3,6 +3,7 @@
 # Keys are blanked and AI endpoints point at a closed local port, so even an attempted call
 # (a new upload, a chat edit) fails locally instead of reaching a provider. .env is untouched.
 x-no-ai: &no_ai
+  DEMO_SANDBOXES: "true"  # "Try the demo" on the sign-in page
   LLM_API_KEY: ""
   LLM_API_BASE: http://127.0.0.1:9
   TRANSCRIBE_API_KEY: ""

@@ -40,6 +40,24 @@ def rate_limit(bucket: str) -> Callable[[Request, CurrentPrincipal], Awaitable[N
     return check
 
 
+def ip_limit(bucket: str, per_minute: int) -> Callable[[Request], Awaitable[None]]:
+    """Per client IP, for public endpoints that have no API key to count against (sign-up, demo)."""
+
+    async def check(request: Request) -> None:
+        redis = getattr(request.app.state, "redis", None)
+        if not per_minute or redis is None:
+            return
+        ip = request.headers.get("fly-client-ip") or (request.client.host if request.client else "?")
+        key = f"rl:ip:{bucket}:{ip}:{int(time.time() // WINDOW_S)}"
+        count = await redis.incr(key)
+        if count == 1:
+            await redis.expire(key, WINDOW_S * 2)
+        if count > per_minute:
+            raise HTTPException(429, "Too many requests. Try again in a minute.", headers={"Retry-After": "60"})
+
+    return check
+
+
 def month_start(now: datetime | None = None) -> datetime:
     now = now or datetime.now(UTC)
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)

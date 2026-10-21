@@ -25,7 +25,37 @@ class Organization(Base):
     name: Mapped[str] = mapped_column(String(255))
     # Transcripts this org may process per calendar month (UTC). None = unlimited.
     monthly_jobs_quota: Mapped[int | None] = mapped_column(Integer)
+    # Corrections flywheel (app/corrections.py): off | anonymised | full. Opt-in only.
+    share_corrections: Mapped[str] = mapped_column(String(16), default="off", server_default="off")
+    # Public demo sandboxes (app/demo.py) are deleted after this; never AI-processed.
+    sandbox_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
+
+
+class User(Base):
+    """A person who signs in by email (magic link). Not tenant-scoped: a user can belong to
+    several workspaces through memberships."""
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(320), unique=True)  # stored lower-case
+    created_at: Mapped[datetime] = _created()
+
+
+class LoginToken(Base):
+    """A one-time magic link (sha256 of the token stored). `invite_id` set when the link is an
+    invitation into a workspace."""
+
+    __tablename__ = "login_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    invite_id: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[datetime] = _created()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Tenant:
@@ -35,6 +65,26 @@ class Tenant:
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
 
 
+class Membership(Tenant, Base):
+    __tablename__ = "memberships"
+    __table_args__ = (UniqueConstraint("user_id", "organization_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    role: Mapped[str] = mapped_column(String(16), default="member")  # owner | member
+    created_at: Mapped[datetime] = _created()
+
+
+class Invite(Tenant, Base):
+    __tablename__ = "invites"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(320))
+    invited_by: Mapped[str | None] = mapped_column(String(36))  # user id
+    created_at: Mapped[datetime] = _created()
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ApiKey(Tenant, Base):
     __tablename__ = "api_keys"
 
@@ -42,6 +92,9 @@ class ApiKey(Tenant, Base):
     name: Mapped[str] = mapped_column(String(255))
     prefix: Mapped[str] = mapped_column(String(16), unique=True)  # public lookup part of the key
     key_hash: Mapped[str] = mapped_column(String(64))  # sha256 of the full key; the key itself is never stored
+    # Set for browser sessions from a magic link: whose session it is, and when it lapses.
+    user_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -79,6 +132,8 @@ class Transcript(Tenant, Base):
     # Audio only: False means speakers are all "Unknown speaker" and the UI should ask the
     # user to label them. None for text transcripts.
     diarization_available: Mapped[bool | None] = mapped_column(Boolean)
+    # Live interviews (app/live.py): "recording" while chunks arrive, "finished" once merged.
+    live_status: Mapped[str | None] = mapped_column(String(16))
     # Set when retention purged the raw file and segments. Maps still work; quotes don't.
     content_expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
@@ -112,6 +167,8 @@ class ProcessMap(Tenant, Base):
     model: Mapped[dict[str, Any]] = mapped_column(JSON)  # ProcessModel: canonical
     bpmn_xml: Mapped[str] = mapped_column(Text)  # always regenerated from model
     current_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # Review queue: steps a person has checked (node ids), so they drop out of the queue.
+    reviewed_node_ids: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     created_at: Mapped[datetime] = _created()
 
 
@@ -175,6 +232,26 @@ class Signoff(Tenant, Base):
     comment: Mapped[str | None] = mapped_column(Text)
     decided_version: Mapped[int | None] = mapped_column(Integer)  # the map version they saw
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Correction(Tenant, Base):
+    """A person fixing something the AI extracted: a free label for where it was wrong.
+    Recorded for every human edit (visual saves, chat edits); shared for test cases only if
+    the workspace opted in (Organization.share_corrections)."""
+
+    __tablename__ = "corrections"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    map_id: Mapped[str] = mapped_column(String(36), index=True)
+    version: Mapped[int] = mapped_column(Integer)  # the version the fix produced
+    via: Mapped[str] = mapped_column(String(16))  # visual | chat
+    kind: Mapped[str] = mapped_column(String(16))  # rename | move | retype | delete | add | connect | disconnect
+    node_id: Mapped[str | None] = mapped_column(String(64))
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    segment_ids: Mapped[list[str]] = mapped_column(JSON, default=list)  # the evidence the AI used
+    created_at: Mapped[datetime] = _created()
 
 
 class AuditLog(Tenant, Base):

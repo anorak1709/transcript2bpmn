@@ -1,5 +1,7 @@
-import { KeyRound, LogOut } from "lucide-react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { Check, KeyRound, LogOut } from "lucide-react"
 import { NavLink, Outlet } from "react-router"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -10,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { setApiKey } from "@/lib/api"
+import { api, setApiKey } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const NAV = [
@@ -20,6 +22,8 @@ const NAV = [
 
 /** Masthead (MASTER: top bar): serif wordmark, small-caps sections, hairline beneath. */
 export function AppShell() {
+  const qc = useQueryClient()
+  const me = useQuery({ queryKey: ["me"], queryFn: api.me, staleTime: 60_000 })
   return (
     <div className="flex min-h-svh flex-col bg-paper">
       <a
@@ -63,13 +67,48 @@ export function AppShell() {
                   className="smallcaps text-graphite"
                   aria-label="Signed in: account menu"
                 >
-                  <KeyRound aria-hidden /> <span className="hidden sm:inline">Signed in</span>
+                  <KeyRound aria-hidden />{" "}
+                  <span className="hidden max-w-48 truncate sm:inline">{me.data?.email ?? "Signed in"}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel className="font-normal text-graphite">Signed in with an API key</DropdownMenuLabel>
+              <DropdownMenuContent align="end" className="min-w-64">
+                <DropdownMenuLabel className="font-normal text-graphite">
+                  {me.data?.email ? `Signed in as ${me.data.email}` : "Signed in with an API key"}
+                  {me.data && <span className="block text-ink">{me.data.workspace.name}</span>}
+                </DropdownMenuLabel>
+                {(me.data?.workspaces.length ?? 0) > 1 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="label font-normal">Switch workspace</DropdownMenuLabel>
+                    {me.data!.workspaces.map((w) => (
+                      <DropdownMenuItem
+                        key={w.id}
+                        disabled={w.id === me.data!.workspace.id}
+                        onSelect={() =>
+                          api.switchWorkspace(w.id).then(
+                            (s) => {
+                              qc.clear()
+                              setApiKey(s.key)
+                            },
+                            (e: Error) => toast.error(e.message),
+                          )
+                        }
+                      >
+                        {w.id === me.data!.workspace.id ? <Check aria-hidden /> : <span className="size-4" />} {w.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setApiKey(null)}>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    // End the session on the server too (an integration key stays valid).
+                    void api
+                      .logout()
+                      .catch(() => undefined)
+                      .finally(() => setApiKey(null))
+                  }}
+                >
                   <LogOut aria-hidden /> Sign out of this browser
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -77,6 +116,15 @@ export function AppShell() {
           </div>
         </div>
       </header>
+      {me.data?.sandbox && (
+        <p
+          role="status"
+          className="border-b border-hairline bg-paper-shade px-6 py-2 text-center text-sm text-graphite"
+        >
+          You're in a demo sandbox: explore, settle points, edit and export. AI processing is switched off, and this
+          copy is deleted within a day.
+        </p>
+      )}
       <main id="main" className="flex-1">
         <Outlet />
       </main>

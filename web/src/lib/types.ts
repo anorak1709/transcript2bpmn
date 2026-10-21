@@ -16,6 +16,7 @@ export interface Transcript {
   project_id: string
   filename: string
   purpose: "meeting" | "policy"
+  live_status: "recording" | "finished" | null
   segment_count: number | null
   duration_seconds: number | null
   content_expired: boolean
@@ -234,3 +235,93 @@ export const ACTIVE_STATUSES: JobStatus[] = [
 ]
 
 export const isActive = (job: Job | null) => !!job && ACTIVE_STATUSES.includes(job.status)
+
+export interface ReviewItem {
+  node_id: string
+  name: string
+  type: string
+  lane: string
+  confidence: number
+  cited: boolean
+  reason: string | null // why it needs a look; null = no flag
+  reviewed: boolean
+}
+
+export interface Suggestion {
+  id: string
+  kind: "automate" | "handoff" | "approvals" | "ai"
+  title: string
+  detail: string
+  node_ids: string[]
+}
+
+export interface Session {
+  key: string
+  email: string
+  workspace_id: string
+  workspace_name: string
+}
+
+export interface WorkspaceRef {
+  id: string
+  name: string
+  role: string
+}
+
+export interface Me {
+  email: string | null
+  workspace: WorkspaceRef
+  workspaces: WorkspaceRef[]
+  sandbox: boolean
+}
+
+export interface Member {
+  email: string
+  role: string
+  joined_at: string | null
+}
+
+export interface Invite {
+  id: string
+  email: string
+  created_at: string | null
+  accepted_at: string | null
+}
+
+export interface Workspace {
+  id: string
+  name: string
+  share_corrections: "off" | "anonymised" | "full"
+  sandbox_expires_at: string | null
+}
+
+export interface CorrectionsSummary {
+  total: number
+  by_kind: Record<string, number>
+}
+
+export interface ElementEvidence {
+  meetings: number
+  with_timers: number
+  with_subprocesses: number
+}
+
+export interface Integrations {
+  camunda: boolean
+  ai: boolean
+}
+
+export interface DemoStatus {
+  sandboxes: boolean
+  demo_mode: boolean
+  sandbox_hours: number
+}
+
+export interface Live {
+  transcript_id: string
+  status: "recording" | "finished" | null
+  chunk_seconds: number
+  lines: Segment[]
+  map_id: string | null
+  map_version: number | null
+}

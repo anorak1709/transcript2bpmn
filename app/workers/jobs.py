@@ -8,9 +8,11 @@ from typing import Any
 from app import storage
 from app.db.models import Job, Project, Transcript
 from app.db.tenancy import bind, system_session
+from app.live import process_chunk, transcript_map
 from app.llm.provider import LiteLLMProvider, LLMProvider
-from app.maps import create_map
+from app.maps import commit_version, create_map, current_positions
 from app.metrics import JOB_STAGE, JOBS
+from app.models.transcript import Segment
 from app.pipeline import ingest
 from app.pipeline.run import model_from_segments, prepare_segments
 from app.pipeline.transcribe import AUDIO_EXTENSIONS, Transcriber, get_transcriber
@@ -42,7 +44,10 @@ def run_job(job_id: str, llm: LLMProvider | None = None, transcriber: Transcribe
 
         try:
             suffix = Path(transcript.filename).suffix.lower()
-            if suffix in AUDIO_EXTENSIONS:
+            if transcript.live_status == "finished":  # a live interview: its lines are already here
+                stage("normalizing")
+                raw = [Segment.model_validate(s) for s in transcript.segments or []]
+            elif suffix in AUDIO_EXTENSIONS:
                 stage("transcribing")
                 with tempfile.TemporaryDirectory() as tmp:
                     path = Path(tmp) / f"audio{suffix}"
@@ -54,14 +59,19 @@ def run_job(job_id: str, llm: LLMProvider | None = None, transcriber: Transcribe
             else:
                 stage("normalizing")
                 raw = ingest.parse(transcript.filename, storage.get(transcript.storage_key))
-            segments = prepare_segments(raw, llm)
+            segments = raw if transcript.live_status == "finished" else prepare_segments(raw, llm)
             transcript.segments = [s.model_dump() for s in segments]
 
             stage("extracting")
             model = model_from_segments(segments, llm).model  # extract + validate/repair
 
             stage("converting")
-            pmap = create_map(db, transcript.project_id, transcript.id, model)
+            existing = transcript_map(db, transcript.id)  # e.g. a live interview's draft
+            if existing is None:
+                pmap = create_map(db, transcript.project_id, transcript.id, model)
+            else:
+                pmap = existing
+                commit_version(db, pmap, model, "extract", current_positions(pmap))
             job.map_id = pmap.id
 
             project = db.get_one(Project, transcript.project_id)
@@ -88,3 +98,13 @@ async def process_transcript(ctx: dict[str, Any], job_id: str) -> None:
 
 async def retention(ctx: dict[str, Any]) -> int:
     return await asyncio.to_thread(purge_expired)
+
+
+async def purge_demo_sandboxes(ctx: dict[str, Any]) -> int:
+    from app.demo import purge_sandboxes
+
+    return await asyncio.to_thread(purge_sandboxes)
+
+
+async def live_chunk(ctx: dict[str, Any], transcript_id: str, index: int, offset_s: float) -> int:
+    return await asyncio.to_thread(process_chunk, transcript_id, index, offset_s)

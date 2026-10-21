@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { BpmnCanvas, type BpmnCanvasHandle, type Dispute } from "@/components/bpmn-canvas"
 import { ConflictPoint } from "@/components/conflict-card"
+import { ReviewQueue } from "@/components/review-tools"
 import { SourceQuote } from "@/components/dossier"
 import {
   AlertDialog,
@@ -430,6 +431,7 @@ export function MapEditor() {
               {[
                 ["step", "Step", 0],
                 ["questions", "Questions", questions.length],
+                ["review", "Review", 0],
                 ["issues", "Issues", map.errors.length],
               ].map(([value, label, count]) => (
                 <TabsTrigger
@@ -482,6 +484,9 @@ export function MapEditor() {
                       )
                     })}
                   </div>
+                </TabsContent>
+                <TabsContent value="review">
+                  <ReviewQueue mapId={mapId} onSelect={(nodeId) => focusNode(nodeId)} key={map.version} />
                 </TabsContent>
                 <TabsContent value="issues">
                   {map.errors.length === 0 && (

@@ -82,6 +82,29 @@ def render_image(bpmn_xml: str, fmt: Literal["svg", "png"]) -> bytes:
     return _EXECUTOR.submit(_render, bpmn_xml, fmt).result(timeout=RENDER_TIMEOUT_S)
 
 
+def _pdf(page_html: str) -> bytes:
+    from playwright.sync_api import Error
+
+    page = None
+    try:
+        page = _page()
+        page.set_content(page_html)
+        pdf: bytes = page.pdf(format="A4", margin={"top": "18mm", "bottom": "18mm", "left": "16mm", "right": "16mm"})
+        return pdf
+    except Error as e:
+        _STATE.pop("browser", None)
+        raise ExportError(f"PDF rendering failed: {e.message.splitlines()[0]}") from e
+    finally:
+        if page is not None:
+            with contextlib.suppress(Error):
+                page.close()
+
+
+def render_pdf(page_html: str) -> bytes:
+    """Print an HTML page to PDF in the same warm headless browser as the diagram renders."""
+    return _EXECUTOR.submit(_pdf, page_html).result(timeout=RENDER_TIMEOUT_S)
+
+
 def _ts(seconds: float | None) -> str:
     return "" if seconds is None else f" @ {int(seconds // 60)}:{int(seconds % 60):02d}"
 

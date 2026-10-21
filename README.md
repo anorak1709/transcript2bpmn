@@ -202,6 +202,52 @@ All template- or graph-based (no LLM) except the policy check, which reuses the 
   comes from and goes to, and the quotes behind it. Approve / request changes is recorded with
   the map version seen, and audited.
 
+## Sign-up, workspaces, public demo
+
+- **Magic-link sign-up** (`app/api/auth.py`): `POST /auth/magic-link {email}` emails a one-time
+  link (15 min) via Resend (`RESEND_API_KEY`, `EMAIL_FROM`; without a key the link is logged).
+  `POST /auth/verify {token}` signs the person in: their first sign-in creates their own
+  workspace; an invitation link (`POST /invites {email}`) adds them to the inviting one. The
+  browser gets an expiring session key (`SESSION_DAYS`), the same kind of key integrations use,
+  so tenancy, rate limits and audit are unchanged. `GET /auth/me`, `/auth/switch`, `/auth/logout`,
+  `/members`, `/invites`.
+- **Public demo** (`app/demo.py`): with `DEMO_SANDBOXES=true` the sign-in page offers **Try the
+  demo**: `POST /demo/sandbox` gives each visitor a fresh copy of the sample workspace (built
+  with the gold extractions, no AI), deleted after `SANDBOX_HOURS` by an hourly worker job.
+  Sandboxes and `DEMO_MODE=true` refuse anything that would call an AI provider (uploads,
+  processing, chat edits, live interviews, AI ideas). Hosting: `fly.toml` + `docs/deploy-fly.md`.
+
+## Review queue, corrections, improvements
+
+- **Review queue** (`GET /maps/{id}/review`, `POST /maps/{id}/review/{node}`): every AI-drafted
+  step, unchecked first, then uncited, then lowest confidence (flagged under 75%). Checking a
+  step isn't an edit (no new version).
+- **Corrections flywheel** (`app/corrections.py`): every human edit (visual save, chat edit) is
+  diffed against the AI's version into `corrections` rows (rename, move, retype, delete, add,
+  connect, disconnect). `GET /corrections` shows them. Sharing is opt-in per workspace
+  (`PUT /workspace {share_corrections: off|anonymised|full}`): `scripts/export_corrections.py`
+  exports consenting workspaces as eval cases (git-ignored `eval/corrections/local/`), and
+  `python -m eval.corrections_eval` re-runs full cases and reports which fixes the drafting now
+  gets right by itself.
+- **Improvements** (`app/pipeline/improve.py`, `GET /maps/{id}/improvements`): free, explainable
+  rules on the map's structure: automation candidates (people doing data work), work bouncing
+  between teams, handoff hotspots, approvals in a row. `POST /maps/{id}/improvements/ai` asks the
+  LLM for more ("edit" role, `prompts/improve_v1.md`), only when a person clicks.
+- **Timers and sub-processes, if the data says so** (`app/pipeline/signals.py`): counts how many
+  meetings describe waits/deadlines/reminders or separate sub-processes
+  (`GET /insights/bpmn-elements`; across all real workspaces: `scripts/element_evidence.py`).
+  Rule: add the BPMN element to extraction once ≥ 20% of at least 10 real meetings describe it.
+
+## Live interviews
+
+`POST /projects/{id}/live` starts one; the browser records with `MediaRecorder` and every
+`LIVE_CHUNK_SECONDS` (default 180) sends one complete recording to
+`POST /transcripts/{id}/live/chunks?index&offset`. The worker (`live_chunk`, `app/live.py`)
+transcribes it, shifts timestamps onto the interview's timeline, appends the lines and redraws
+the meeting's draft map from everything so far; chunks of one interview are serialised by a row
+lock. `POST …/live/finish` processes and merges it like any meeting (reusing the draft map).
+Each chunk costs transcription + extraction.
+
 ## Data handling
 
 - **Retention:** `retention_days` per project. A daily arq cron (03:00) deletes each expired
@@ -223,6 +269,11 @@ All template- or graph-based (no LLM) except the policy check, which reuses the 
   (`app/static/vendor/bpmn-viewer.production.min.js`), so the server makes no CDN calls. Needs
   `playwright install chromium` (it's in the Docker image), or set
   `EXPORT_BROWSER_CHANNEL=chrome` to use a local Chrome.
+- `docx` / `pdf`: the same SOP as Word (python-docx) and PDF (printed by the export browser),
+  converted from the Markdown so all three say the same thing.
+- `POST /maps/{id}/push/camunda`: creates the BPMN as a file in Camunda 8 Web Modeler
+  (`CAMUNDA_CLIENT_ID`/`_SECRET`/`_PROJECT_ID`; written to Camunda's documented API, **not yet
+  tested against a live account**). Signavio next, once there's an account to build against.
 - `md`: a written SOP (roles, numbered steps with owners, decisions with their conditions,
   parallel work, outcomes, open questions). Every step quotes the transcript lines it came
   from, with speaker, meeting and timestamp.

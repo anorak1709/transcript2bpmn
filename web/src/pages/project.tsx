@@ -8,6 +8,7 @@ import { Page } from "@/components/app-shell"
 import { ConflictPoint, PolicyDifference } from "@/components/conflict-card"
 import { PageHeader, Section, StatusMark } from "@/components/dossier"
 import { AddFiles, Gaps, Signoffs, Speakers } from "@/components/process-file"
+import { Improvements, ReviewQueue } from "@/components/review-tools"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -80,7 +81,19 @@ function MeetingRow({ t, projectId }: { t: Transcript; projectId: string }) {
                 </Link>
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem disabled={!canProcess} onSelect={() => process.mutate()}>
+            {t.live_status === "recording" && (
+              <DropdownMenuItem
+                onSelect={() =>
+                  api.finishLive(t.id).then(
+                    () => qc.invalidateQueries({ queryKey: ["project", projectId] }),
+                    (e: Error) => toast.error(e.message),
+                  )
+                }
+              >
+                Finish this live interview
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem disabled={!canProcess || t.live_status === "recording"} onSelect={() => process.mutate()}>
               {job ? "Process again" : "Process"}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -164,8 +177,15 @@ function FileTable({ files, projectId, caption }: { files: Transcript[]; project
 }
 
 export function ExportMenu({ mapId }: { mapId: string }) {
-  const run = (format: "bpmn" | "svg" | "png" | "md") =>
+  const integrations = useQuery({ queryKey: ["integrations"], queryFn: api.integrations, staleTime: 300_000 })
+  const run = (format: "bpmn" | "svg" | "png" | "md" | "docx" | "pdf") =>
     downloadExport(mapId, format).catch((e: Error) => toast.error(e.message))
+  const camunda = () =>
+    api.pushCamunda(mapId).then(
+      (r) =>
+        toast.success("Sent to Camunda", { action: { label: "Open", onClick: () => window.open(r.url, "_blank") } }),
+      (e: Error) => toast.error(e.message),
+    )
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -173,9 +193,14 @@ export function ExportMenu({ mapId }: { mapId: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={() => run("bpmn")}>BPMN 2.0 file</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => run("md")}>Written procedure (SOP)</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => run("docx")}>Written procedure (Word)</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => run("pdf")}>Written procedure (PDF)</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => run("md")}>Written procedure (Markdown)</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => run("png")}>Diagram image (PNG)</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => run("svg")}>Diagram vector (SVG)</DropdownMenuItem>
+        {integrations.data?.camunda && (
+          <DropdownMenuItem onSelect={() => void camunda()}>Send to Camunda</DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -193,6 +218,7 @@ export function ProjectPage() {
   // Refetch whenever another file finishes processing, or the map changes.
   const merged = project.data?.transcripts.filter((t) => t.latest_job?.status === "done").length ?? 0
   const refresh = `${merged}:${project.data?.map_version ?? 0}`
+  const integrations = useQuery({ queryKey: ["integrations"], queryFn: api.integrations, staleTime: 300_000 })
   const conflicts = useQuery({
     queryKey: ["conflicts", projectId, refresh],
     queryFn: () => api.conflicts(projectId, { status: "open" }),
@@ -319,6 +345,18 @@ export function ProjectPage() {
               <Gaps projectId={p.id} refresh={refresh} />
             </Section>
           )}
+
+          {p.merged_map_id && (
+            <Section title="Steps to check" id="review" aside="Where the AI is least sure">
+              <ReviewQueue mapId={p.merged_map_id} limit={5} key={refresh} />
+            </Section>
+          )}
+
+          {p.merged_map_id && (
+            <Section title="Improvements" id="improvements" aside="Automation, handoffs, approvals">
+              <Improvements mapId={p.merged_map_id} aiAvailable={!!integrations.data?.ai} key={refresh} />
+            </Section>
+          )}
         </div>
 
         <div className="min-w-0 space-y-12">
@@ -345,6 +383,14 @@ export function ProjectPage() {
               prompt="Drop a recording or transcript to add it."
               hint=".vtt .srt .txt .docx or .mp3 .m4a .wav .webm .mp4 · processing starts on its own"
             />
+            {integrations.data?.ai && (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Button variant="outline" size="sm" asChild>
+                  <Link to={`/projects/${p.id}/live`}>Start a live interview</Link>
+                </Button>
+                <span className="text-xs text-graphite">Records here; the draft map updates every few minutes.</span>
+              </div>
+            )}
           </Section>
 
           <Section title="Policy documents" id="policy-documents" aside="Compared, never merged">

@@ -16,7 +16,7 @@ import { ProjectPage } from "@/pages/project"
 import { ReviewPage } from "@/pages/review"
 import { Projects } from "@/pages/projects"
 import { Settings } from "@/pages/settings"
-import { SignIn } from "@/pages/sign-in"
+import { AuthCallback, SignIn } from "@/pages/sign-in"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +30,7 @@ const queryClient = new QueryClient({
 
 // The editor pulls in bpmn-js (most of the JS); load it only when a map is opened.
 const MapEditor = lazy(() => import("@/pages/map-editor").then((m) => ({ default: m.MapEditor })))
+const LivePage = lazy(() => import("@/pages/live").then((m) => ({ default: m.LivePage })))
 
 function NotFound() {
   return (
@@ -50,12 +51,21 @@ const router = createBrowserRouter(
   [
     // A stakeholder's sign-off link: no API key, no app shell (the token is the credential).
     { path: "review/:token", element: <ReviewPage /> },
+    { path: "auth", element: <AuthCallback /> }, // a magic link lands here
     {
       element: <RequireKey />,
       children: [
         { index: true, element: <Navigate to="/projects" replace /> },
         { path: "projects", element: <Projects /> },
         { path: "projects/:projectId", element: <ProjectPage /> },
+        {
+          path: "projects/:projectId/live",
+          element: (
+            <Suspense fallback={<Skeleton className="m-6 h-[70svh] rounded-sm bg-paper-shade" />}>
+              <LivePage />
+            </Suspense>
+          ),
+        },
         {
           path: "maps/:mapId",
           element: (

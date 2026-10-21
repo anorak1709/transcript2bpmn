@@ -107,6 +107,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         # Sign in
         page.goto(f"{server}/")
         expect(page.get_by_role("heading", name="Transcript to BPMN")).to_be_visible()
+        page.get_by_role("button", name="Use an API key instead").click()  # email is the default way in
         page.get_by_label("API key").fill("t2b_wrong_key")
         page.get_by_role("button", name="Open the workspace").click()
         expect(page.get_by_text("That key isn't valid or was revoked.")).to_be_visible()

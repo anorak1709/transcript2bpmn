@@ -4,6 +4,7 @@ import { toast } from "sonner"
 
 import { Page } from "@/components/app-shell"
 import { PageHeader, Section } from "@/components/dossier"
+import { ImproveDrafts, Team } from "@/components/workspace-settings"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -134,6 +135,14 @@ const ACTION_LABEL: Record<string, string> = {
   retention_purge: "Retention: content deleted",
   create_key: "Created an API key",
   revoke_key: "Revoked an API key",
+  sign_in: "Signed in",
+  invite: "Invited a colleague",
+  cancel_invite: "Cancelled an invitation",
+  share_corrections: "Changed correction sharing",
+  review_step: "Checked a step",
+  ai_improvements: "Asked AI for improvements",
+  live_start: "Started a live interview",
+  live_finish: "Finished a live interview",
 }
 
 /** Readable details only: ids are noise to a reader (they stay in the API). */
@@ -201,6 +210,9 @@ export function Settings() {
             </table>
           )}
         </Section>
+
+        <Team />
+        <ImproveDrafts />
 
         <Section title="This month" id="usage">
           {usage.isPending ? (

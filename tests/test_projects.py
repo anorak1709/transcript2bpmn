@@ -195,7 +195,16 @@ def test_exports(tenant: TenantCtx, monkeypatch: Any) -> None:
     assert "**Validate supplier bank details** — Treasury" in md
     assert "transcript_2.txt" in md and "treasury validates the supplier" in md.lower()  # cited quote + source
     assert "## Open questions" in md and "Meetings disagree (owner)" in md
-    assert tenant.client.get(f"/maps/{mid}/export/pdf").status_code == 422
+    assert tenant.client.get(f"/maps/{mid}/export/xlsx").status_code == 422
+    docx = tenant.client.get(f"/maps/{mid}/export/docx")
+    assert docx.status_code == 200 and docx.content[:2] == b"PK"  # a Word file is a zip
+    assert 'filename="Supplier_invoice_approval.docx"' in docx.headers["content-disposition"]
+    import io
+
+    from docx import Document
+
+    text = "\n".join(p.text for p in Document(io.BytesIO(docx.content)).paragraphs)
+    assert "Validate supplier bank details — Treasury" in text and "treasury validates the supplier" in text.lower()
 
     chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     if Path(chrome).exists():
@@ -210,11 +219,15 @@ def test_exports(tenant: TenantCtx, monkeypatch: Any) -> None:
     png = tenant.client.get(f"/maps/{mid}/export/png")
     assert png.status_code == 200 and png.content[:8] == b"\x89PNG\r\n\x1a\n" and len(png.content) > 20_000
     Path(__file__).parent.joinpath(".export_check.png").write_bytes(png.content)  # for a manual look; gitignored
+    pdf = tenant.client.get(f"/maps/{mid}/export/pdf")
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-"), pdf.text[:200]
     assert {a["details"]["format"] for a in tenant.client.get("/audit").json() if a["action"] == "export"} == {
         "bpmn",
         "md",
+        "docx",
         "svg",
         "png",
+        "pdf",
     }
 
 

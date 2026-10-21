@@ -50,5 +50,6 @@ def test_job_runs_through_redis_and_a_real_worker(monkeypatch: pytest.MonkeyPatc
 
 
 def test_retention_cron_is_scheduled() -> None:
-    (cron,) = WorkerSettings.cron_jobs
-    assert cron.coroutine is jobs.retention and cron.hour == 3 and cron.minute == 0
+    by_job = {c.coroutine: c for c in WorkerSettings.cron_jobs}
+    assert by_job[jobs.retention].hour == 3 and by_job[jobs.retention].minute == 0
+    assert by_job[jobs.purge_demo_sandboxes].minute == 15  # hourly

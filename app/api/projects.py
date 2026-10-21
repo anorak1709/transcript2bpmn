@@ -16,6 +16,7 @@ from app.audit import audit
 from app.auth import DB, CurrentPrincipal
 from app.core.config import get_settings
 from app.db.models import AuditLog, Conflict, Job, MapVersion, Organization, ProcessMap, Project, Transcript
+from app.demo import require_ai
 from app.models.process import ProcessModel
 from app.pipeline import ingest
 from app.pipeline.edit import AnyOp, ResolveOpenQuestion, apply_ops
@@ -50,6 +51,7 @@ class TranscriptOut(BaseModel):
     project_id: str
     filename: str
     purpose: str = "meeting"  # meeting | policy
+    live_status: str | None = None  # live interviews: recording | finished
     segment_count: int | None  # text uploads
     duration_seconds: float | None  # audio uploads
     content_expired: bool = False
@@ -138,6 +140,7 @@ def _transcript_out(t: Transcript, duration: float | None = None, job: Job | Non
         project_id=t.project_id,
         filename=t.filename,
         purpose=t.purpose,
+        live_status=t.live_status,
         segment_count=len(t.segments) if t.segments else None,
         duration_seconds=duration,
         content_expired=t.content_expired_at is not None,
@@ -212,6 +215,7 @@ async def upload_transcript(
     """Upload a meeting (transcript or recording), or with ?purpose=policy a policy/SOP
     document (.docx/.txt) that the map is compared against but never merged with."""
     project = _project(db, project_id)
+    require_ai(db, project.organization_id)  # an upload is only useful if it can be processed
     filename = Path(file.filename or "").name  # never trust a client path
     if Path(filename).suffix.lower() in AUDIO_EXTENSIONS:
         if purpose == "policy":
@@ -268,11 +272,102 @@ async def process_transcript(transcript_id: str, request: Request, db: DB) -> Jo
         raise HTTPException(404, "Transcript not found")
     if t.content_expired_at is not None:
         raise HTTPException(410, "Transcript content was deleted by the retention policy")
+    require_ai(db, t.organization_id)
     check_quota(db, t.organization_id)
     job = Job(transcript_id=transcript_id, status="queued")
     db.add(job)
     db.flush()
     audit(db, "process", "transcript", t.id, job_id=job.id)
+    db.commit()
+    await request.app.state.arq.enqueue_job(
+        "process_transcript", job.id, _job_id=job.id, _queue_name=get_settings().job_queue
+    )
+    return _job_out(job)
+
+
+# --- Live interviews (app/live.py) ------------------------------------------------------------
+
+
+class LiveOut(BaseModel):
+    transcript_id: str
+    status: str | None  # recording | finished
+    chunk_seconds: int  # the browser sends a complete recording this often
+    lines: list[dict[str, Any]]  # the transcript so far (newest last)
+    map_id: str | None  # the draft map, redrawn after each chunk
+    map_version: int | None
+
+
+def _live_out(db: Session, t: Transcript) -> LiveOut:
+    from app.live import transcript_map
+
+    pmap = transcript_map(db, t.id)
+    return LiveOut(
+        transcript_id=t.id,
+        status=t.live_status,
+        chunk_seconds=get_settings().live_chunk_seconds,
+        lines=t.segments or [],
+        map_id=pmap.id if pmap else None,
+        map_version=pmap.current_version if pmap else None,
+    )
+
+
+def _live(db: Session, transcript_id: str) -> Transcript:
+    t = db.get(Transcript, transcript_id)
+    if t is None or t.live_status is None:
+        raise HTTPException(404, "Live interview not found")
+    return t
+
+
+@router.post("/projects/{project_id}/live", status_code=201, dependencies=HEAVY)
+def start_live(project_id: str, db: DB) -> LiveOut:
+    """Start a live interview: a meeting whose transcript and draft map grow while it happens."""
+    project = _project(db, project_id)
+    require_ai(db, project.organization_id)
+    check_quota(db, project.organization_id)
+    t = _new_transcript(db, project, f"Live interview {datetime.now().strftime('%Y-%m-%d %H.%M')}.webm")
+    t.live_status, t.segments = "recording", []
+    audit(db, "live_start", "transcript", t.id, project_id=project.id)
+    db.commit()
+    return _live_out(db, t)
+
+
+@router.post("/transcripts/{transcript_id}/live/chunks", status_code=202, dependencies=HEAVY)
+async def live_chunk(
+    transcript_id: str, index: int, offset: float, file: UploadFile, request: Request, db: DB
+) -> LiveOut:
+    """One complete recording of the last few minutes (chunk `index`, starting `offset` seconds
+    in). Stored, then transcribed and merged into the draft by the worker, in order."""
+    from app.live import chunk_key
+
+    t = _live(db, transcript_id)
+    require_ai(db, t.organization_id)
+    if t.live_status != "recording":
+        raise HTTPException(409, "This interview has finished")
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "Chunk too large: send shorter chunks")
+    storage.put(chunk_key(t, index), data)
+    await request.app.state.arq.enqueue_job(
+        "live_chunk", t.id, index, offset, _job_id=f"live:{t.id}:{index}", _queue_name=get_settings().job_queue
+    )
+    return _live_out(db, t)
+
+
+@router.get("/transcripts/{transcript_id}/live")
+def live_status(transcript_id: str, db: DB) -> LiveOut:
+    return _live_out(db, _live(db, transcript_id))
+
+
+@router.post("/transcripts/{transcript_id}/live/finish", status_code=202)
+async def finish_live(transcript_id: str, request: Request, db: DB) -> JobOut:
+    """Stop recording: the interview is processed and merged into the process like any meeting."""
+    t = _live(db, transcript_id)
+    require_ai(db, t.organization_id)
+    t.live_status = "finished"
+    job = Job(transcript_id=t.id, status="queued")
+    db.add(job)
+    db.flush()
+    audit(db, "live_finish", "transcript", t.id, lines=len(t.segments or []))
     db.commit()
     await request.app.state.arq.enqueue_job(
         "process_transcript", job.id, _job_id=job.id, _queue_name=get_settings().job_queue

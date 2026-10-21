@@ -1,0 +1,45 @@
+# Public demo on Fly.io: AI switched off, one-click sandbox workspaces. See docs/deploy-fly.md.
+app = "transcript2bpmn-demo"  # change to a name that's free on Fly
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  release_command = "alembic upgrade head"  # migrations run once per deploy, before machines start
+
+[env]
+  DEMO_MODE = "true"        # nothing may call an AI provider
+  DEMO_SANDBOXES = "true"   # "Try the demo" on the sign-in page
+  SANDBOX_HOURS = "24"
+  LOG_LEVEL = "INFO"
+  EXPORT_BROWSER_CHANNEL = ""  # Playwright's bundled Chromium (in the image)
+
+[processes]
+  app = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*"
+  worker = "arq app.workers.settings.WorkerSettings"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  processes = ["app"]
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1  # a recruiter's first click shouldn't wait for a cold start
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"  # headless Chromium renders PNG/PDF exports
+  processes = ["app"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  processes = ["worker"]

@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ModelRole = Literal["extract", "filter", "repair", "edit", "merge"]
@@ -76,6 +76,37 @@ class Settings(BaseSettings):
     # Merge entity resolution: cosine >= auto -> same step; < reject -> different; else ask the LLM.
     merge_auto_match: float = 0.90
     merge_reject: float = 0.70
+
+    # Public URL of the web app, used in magic-link and invite emails.
+    public_url: str = "http://localhost:8000"
+    # Sign-up by email magic link. No RESEND_API_KEY = links are written to the log (dev only).
+    resend_api_key: str | None = None
+    email_from: str = "Transcript to BPMN <login@example.com>"
+    magic_link_minutes: int = 15
+    session_days: int = 30
+    # Public demo: one-click sandbox workspaces (no AI), deleted after sandbox_hours.
+    demo_sandboxes: bool = False
+    sandbox_hours: int = 24
+    # Demo deployment: nothing anywhere may call an AI provider (uploads aren't processed).
+    demo_mode: bool = False
+    # Live interviews: the browser sends one complete audio chunk this often.
+    live_chunk_seconds: int = 180
+    # Send to Camunda (Web Modeler API, client credentials). Unset = the button is hidden.
+    camunda_client_id: str | None = None
+    camunda_client_secret: str | None = None
+    camunda_project_id: str | None = None
+    camunda_oauth_url: str = "https://login.cloud.camunda.io/oauth/token"
+    camunda_audience: str = "api.cloud.camunda.io"
+    camunda_modeler_url: str = "https://modeler.cloud.camunda.io"
+
+    @field_validator("database_url")
+    @classmethod
+    def _psycopg_driver(cls, v: str) -> str:
+        """Hosted Postgres (Fly, Heroku-style) hands out postgres://; SQLAlchemy needs the driver."""
+        for prefix in ("postgres://", "postgresql://"):
+            if v.startswith(prefix):
+                return "postgresql+psycopg://" + v[len(prefix) :]
+        return v
 
     @model_validator(mode="after")
     def _azure_needs_endpoint_and_version(self) -> "Settings":

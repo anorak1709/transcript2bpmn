@@ -28,6 +28,10 @@ PUBLIC = {
     "/docs/oauth2-redirect",
     "/redoc",
     "/review/{token}",  # a stakeholder's sign-off link: the token is the credential (tests/test_insights.py)
+    "/auth/magic-link",  # sign-up/sign-in: no account yet (tests/test_product.py)
+    "/auth/verify",
+    "/demo/status",  # the public demo (tests/test_product.py)
+    "/demo/sandbox",
 }
 
 
@@ -63,6 +67,8 @@ def victim(tenant: TenantCtx) -> dict[str, str]:
         "name": "Priya",  # a speaker in A's meetings: B can't tag them
         "gap_id": gap["id"],
         "signoff_id": signoff.json()["id"],
+        "node_id": "t_pay",  # review-queue marks on A's map
+        "invite_id": tenant.client.post("/invites", json={"email": "victim-invitee@example.com"}).json()["id"],
     }
 
 
@@ -80,6 +86,9 @@ def _call(client: Any, method: str, path: str) -> Any:
         kw["json"] = {"role": "owner"}
     elif path.endswith("/signoffs") and method == "POST":
         kw["json"] = {"name": "x", "lane_ids": ["lane_ap"]}
+    elif path.endswith("/live/chunks"):
+        path += "?index=0&offset=0"
+        kw["files"] = {"file": ("c.webm", b"x")}
     return client.request(method, path, **kw)
 
 

@@ -3,6 +3,18 @@ import type {
   AuditEntry,
   ChatResult,
   Conflict,
+  CorrectionsSummary,
+  DemoStatus,
+  ElementEvidence,
+  Integrations,
+  Invite,
+  Live,
+  Me,
+  Member,
+  ReviewItem,
+  Session,
+  Suggestion,
+  Workspace,
   Gap,
   Job,
   MapVersion,
@@ -139,6 +151,37 @@ export const api = {
     request<ProcessMap>("PUT", `/maps/${id}/bpmn`, xml, "application/xml", version),
   versions: (id: string) => request<MapVersion[]>("GET", `/maps/${id}/versions`),
 
+  me: () => request<Me>("GET", "/auth/me"),
+  switchWorkspace: (workspaceId: string) =>
+    request<Session>("POST", "/auth/switch", json({ workspace_id: workspaceId }), "application/json"),
+  logout: () => request("POST", "/auth/logout"),
+  members: () => request<Member[]>("GET", "/members"),
+  invites: () => request<Invite[]>("GET", "/invites"),
+  invite: (email: string) => request<Invite>("POST", "/invites", json({ email }), "application/json"),
+  cancelInvite: (id: string) => request("DELETE", `/invites/${id}`),
+  workspace: () => request<Workspace>("GET", "/workspace"),
+  setSharing: (level: Workspace["share_corrections"]) =>
+    request<Workspace>("PUT", "/workspace", json({ share_corrections: level }), "application/json"),
+  corrections: () => request<CorrectionsSummary>("GET", "/corrections?limit=0"),
+  elementEvidence: () => request<ElementEvidence>("GET", "/insights/bpmn-elements"),
+  integrations: () => request<Integrations>("GET", "/integrations"),
+
+  reviewQueue: (mapId: string) => request<ReviewItem[]>("GET", `/maps/${mapId}/review`),
+  markReviewed: (mapId: string, nodeId: string, checked: boolean) =>
+    request("POST", `/maps/${mapId}/review/${encodeURIComponent(nodeId)}`, json({ checked }), "application/json"),
+  improvements: (mapId: string) => request<Suggestion[]>("GET", `/maps/${mapId}/improvements`),
+  aiImprovements: (mapId: string) => request<Suggestion[]>("POST", `/maps/${mapId}/improvements/ai`),
+  pushCamunda: (mapId: string) => request<{ target: string; url: string }>("POST", `/maps/${mapId}/push/camunda`),
+
+  startLive: (projectId: string) => request<Live>("POST", `/projects/${projectId}/live`),
+  live: (transcriptId: string) => request<Live>("GET", `/transcripts/${transcriptId}/live`),
+  liveChunk: (transcriptId: string, index: number, offset: number, blob: Blob) => {
+    const form = new FormData()
+    form.append("file", blob, `chunk-${index}.webm`)
+    return request<Live>("POST", `/transcripts/${transcriptId}/live/chunks?index=${index}&offset=${offset}`, form)
+  },
+  finishLive: (transcriptId: string) => request<Job>("POST", `/transcripts/${transcriptId}/live/finish`),
+
   keys: () => request<ApiKey[]>("GET", "/keys"),
   createKey: (name: string) => request<ApiKey & { key: string }>("POST", "/keys", json({ name }), "application/json"),
   revokeKey: (id: string) => request<ApiKey>("DELETE", `/keys/${id}`),
@@ -146,7 +189,7 @@ export const api = {
 }
 
 /** Download an export with the API key attached (a plain link can't send the header). */
-export function downloadExport(mapId: string, format: "bpmn" | "svg" | "png" | "md"): Promise<void> {
+export function downloadExport(mapId: string, format: "bpmn" | "svg" | "png" | "md" | "docx" | "pdf"): Promise<void> {
   return download(`/maps/${mapId}/export/${format}`, `process.${format}`)
 }
 
@@ -205,4 +248,25 @@ export const review = {
   get: (token: string) => reviewRequest<Review>(token),
   decide: (token: string, decision: "approved" | "changes_requested", comment: string) =>
     reviewRequest<Review>(token, { decision, comment }),
+}
+
+/** Sign-up / sign-in without a key yet: never touches the stored key on errors. */
+async function publicRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(res.status, detail(data, res.status))
+  }
+  return (await res.json()) as T
+}
+
+export const auth = {
+  requestLink: (email: string) => publicRequest<{ status: string }>("POST", "/auth/magic-link", { email }),
+  verify: (token: string) => publicRequest<Session>("POST", "/auth/verify", { token }),
+  demoStatus: () => publicRequest<DemoStatus>("GET", "/demo/status"),
+  sandbox: () => publicRequest<Session>("POST", "/demo/sandbox"),
 }

@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app import corrections
 from app.db.models import MapVersion, ProcessMap
 from app.models.process import ProcessModel
 from app.pipeline.convert import KeptPositions
@@ -47,6 +48,8 @@ def commit_version(
     instruction: str | None = None,
 ) -> MapVersion:
     xml = model_to_bpmn(model, keep)  # raises before anything is written if the XML isn't valid
+    if source in corrections.HUMAN_SOURCES:  # a person fixing the AI's draft: a free label
+        corrections.record(db, pmap, ProcessModel.model_validate(pmap.model), model, source, pmap.current_version + 1)
     db.execute(delete(MapVersion).where(MapVersion.map_id == pmap.id, MapVersion.version > pmap.current_version))
     version = MapVersion(
         map_id=pmap.id,
