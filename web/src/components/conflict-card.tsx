@@ -2,7 +2,7 @@ import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { formatTimestamp, ROLE_LABEL, roman } from "@/lib/format"
+import { formatTimestamp, ROLE_LABEL } from "@/lib/format"
 import type { Conflict, Resolution, Side } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -25,27 +25,27 @@ function Evidence({ sides, ownerSide }: { sides: Side[]; ownerSide: number | nul
   if (!shown.length) return null
   return (
     <details className="group text-sm">
-      <summary className="cursor-pointer text-graphite select-none hover:text-ink">
+      <summary className="cursor-pointer text-fg-muted select-none hover:text-fg">
         Who said what
         {ownerSide != null && (
-          <span className="font-bold text-ink"> · the process owner says {sides[ownerSide].label}</span>
+          <span className="font-bold text-fg"> · the process owner says {sides[ownerSide].label}</span>
         )}
       </summary>
-      <div className="mt-2 space-y-3 border-l border-rule pl-3">
+      <div className="mt-2 space-y-3 border-l border-line-strong pl-3">
         {sides.map((s, i) =>
           s.quotes.length ? (
             <div key={i}>
               <p className="label">
                 {s.label}
-                {i === ownerSide && <span className="text-ink"> · process owner</span>}
+                {i === ownerSide && <span className="text-fg"> · process owner</span>}
               </p>
               <ul className="mt-1 space-y-1.5">
                 {s.quotes.map((q, k) => (
                   <li key={k}>
-                    <span className="serif text-[0.98rem] italic">
+                    <span className="text-[0.98rem]">
                       {q.text ? `“${q.text}”` : "Source text no longer available."}
                     </span>
-                    <span className="smallcaps ml-1.5 text-xs text-graphite">
+                    <span className="ml-1.5 text-xs text-fg-muted">
                       {q.policy
                         ? `policy · ${q.meeting}`
                         : [
@@ -84,7 +84,7 @@ function VariantForm({
     question.trim() && labels.every((l) => l.trim()) && new Set(labels.map((l) => l.trim())).size === labels.length
   return (
     <form
-      className="space-y-3 rounded-sm border border-rule bg-sheet p-3"
+      className="space-y-3 rounded-sm border border-line-strong bg-surface p-3"
       onSubmit={async (e) => {
         e.preventDefault()
         if (!ready) return
@@ -99,7 +99,7 @@ function VariantForm({
         }
       }}
     >
-      <p className="text-sm text-graphite">
+      <p className="text-sm text-fg-muted">
         Keep every version as a branch of a new decision, e.g. <i>Which region?</i> → North / South.
       </p>
       <div className="space-y-1.5">
@@ -140,6 +140,11 @@ function VariantForm({
   )
 }
 
+/** The explanation after a description's leading question (the question is shown above it). */
+function afterQuestion(description: string): string {
+  return description.replace(/^.+?\?\s+(?=(?:The|Existing|Policy|Meetings|They)\b)/, "")
+}
+
 /** A point of disagreement between meetings, numbered like a clause (i., ii., …). The
  *  options are what each meeting said; nothing is applied until someone chooses. */
 export function ConflictPoint({
@@ -148,12 +153,14 @@ export function ConflictPoint({
   onResolve,
   onSelect,
   className,
+  bare,
 }: {
   number: number
   conflict: PointConflict
   onResolve: (how: Resolution) => Promise<void>
   onSelect?: () => void
   className?: string
+  bare?: boolean // inside an opened review item: the row above already shows the question
 }) {
   const { kind, description, options } = conflict
   const [busy, setBusy] = useState<number | "manual" | null>(null)
@@ -168,25 +175,31 @@ export function ConflictPoint({
   }
 
   return (
-    <article className={cn("grid grid-cols-[2rem_1fr] gap-x-2 py-4", className)}>
-      <span className="serif tabular pt-0.5 text-xl leading-none text-oxblood" aria-hidden>
-        {roman(number)}.
-      </span>
-      <div className="min-w-0 space-y-2">
-        <h3 className="label font-sans">
-          <span className="sr-only">Point {roman(number)}: </span>
-          {KIND_LABEL[kind]}
-        </h3>
-        {onSelect ? (
+    <article className={cn(bare ? "py-1" : "grid grid-cols-[2rem_1fr] gap-x-2 py-4", className)}>
+      {!bare && (
+        <span className="tabular pt-0.5 text-xl leading-none text-signal" aria-hidden>
+          {number}.
+        </span>
+      )}
+      <div className="min-w-0 space-y-3">
+        {!bare && (
+          <h3 className="label">
+            <span className="sr-only">Point {number}: </span>
+            {KIND_LABEL[kind]}
+          </h3>
+        )}
+        {bare ? (
+          <p className="text-fg-muted">{afterQuestion(description)}</p>
+        ) : onSelect ? (
           <button
             type="button"
             onClick={onSelect}
-            className="serif text-left text-[1.08rem] leading-snug hover:underline hover:decoration-1 hover:underline-offset-4"
+            className="text-left text-[1.08rem] leading-snug hover:underline hover:decoration-1 hover:underline-offset-4"
           >
             {description}
           </button>
         ) : (
-          <p className="serif text-[1.08rem] leading-snug">{description}</p>
+          <p className="text-[1.08rem] leading-snug">{description}</p>
         )}
         {conflict.sides && <Evidence sides={conflict.sides} ownerSide={conflict.owner_side ?? null} />}
         {variant ? (
@@ -196,16 +209,12 @@ export function ConflictPoint({
             onSubmit={(question, labels) => resolve({ variant: { question, labels } }, "manual")}
           />
         ) : (
-          <div
-            className="flex flex-wrap items-center gap-2 pt-1"
-            role="group"
-            aria-label={`Settle point ${roman(number)}`}
-          >
-            <span className="text-xs text-graphite">Settle as</span>
+          <div className="flex flex-wrap items-center gap-2 pt-1" role="group" aria-label={`Settle point ${number}`}>
+            <span className="text-xs text-fg-muted">Settle as</span>
             {options.map((opt, i) => (
               <Button
                 key={i}
-                size="sm"
+                size={bare ? "default" : "sm"}
                 variant="outline"
                 disabled={busy !== null}
                 aria-label={`Settle as ${opt}`}
@@ -215,14 +224,19 @@ export function ConflictPoint({
               </Button>
             ))}
             {kind !== "order" && (
-              <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => setVariant(true)}>
+              <Button
+                size={bare ? "default" : "sm"}
+                variant="ghost"
+                disabled={busy !== null}
+                onClick={() => setVariant(true)}
+              >
                 Both, by case…
               </Button>
             )}
             <Button
-              size="sm"
+              size={bare ? "default" : "sm"}
               variant="ghost"
-              className="text-graphite"
+              className="text-fg-muted"
               disabled={busy !== null}
               onClick={() => resolve({}, "manual")}
             >
@@ -241,10 +255,12 @@ export function PolicyDifference({
   number,
   conflict,
   onResolve,
+  bare,
 }: {
   number: number
   conflict: Conflict
   onResolve: (how: Resolution) => Promise<void>
+  bare?: boolean
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const act = async (how: Resolution, key: string) => {
@@ -257,16 +273,22 @@ export function PolicyDifference({
   }
   const policySays = conflict.options[1]
   return (
-    <article className="grid grid-cols-[2rem_1fr] gap-x-2 py-4">
-      <span className="serif tabular pt-0.5 text-lg leading-none text-oxblood" aria-hidden>
-        §{number}
-      </span>
-      <div className="min-w-0 space-y-2">
-        <h3 className="label font-sans">
-          <span className="sr-only">Policy difference {number}: </span>
-          {KIND_LABEL[conflict.kind]}
-        </h3>
-        <p className="serif text-[1.08rem] leading-snug">{conflict.description}</p>
+    <article className={bare ? "py-1" : "grid grid-cols-[2rem_1fr] gap-x-2 py-4"}>
+      {!bare && (
+        <span className="tabular pt-0.5 text-lg leading-none text-signal" aria-hidden>
+          §{number}
+        </span>
+      )}
+      <div className="min-w-0 space-y-3">
+        {!bare && (
+          <h3 className="label">
+            <span className="sr-only">Policy difference {number}: </span>
+            {KIND_LABEL[conflict.kind]}
+          </h3>
+        )}
+        <p className={bare ? "text-fg-muted" : "text-[1.08rem] leading-snug"}>
+          {bare ? afterQuestion(conflict.description) : conflict.description}
+        </p>
         <Evidence
           sides={conflict.sides.map((s, i) => ({
             ...s,
@@ -290,7 +312,7 @@ export function PolicyDifference({
           <Button
             size="sm"
             variant="ghost"
-            className="text-graphite"
+            className="text-fg-muted"
             disabled={!!busy}
             onClick={() => act({ note: "dismissed" }, "dismissed")}
           >

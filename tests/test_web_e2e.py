@@ -116,7 +116,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
 
         # Projects list -> project
         expect(page.get_by_role("heading", name="Processes")).to_be_visible()
-        # The design system is what's actually rendered (MASTER.md): paper, ink, serif, oxblood.
+        # The design system is what's actually rendered (MASTER.md): Swiss dark, Lexend + Source Sans 3, signal red.
         style = page.evaluate(
             """() => {
               const cs = (el) => getComputedStyle(el)
@@ -127,11 +127,11 @@ def test_main_workflow_in_the_browser(server: str) -> None:
                        primary: cs(primary).backgroundColor }
             }"""
         )
-        assert style["bg"] == "rgb(21, 19, 17)" and style["primary"] == "rgb(236, 230, 218)", style
-        assert "EB Garamond" in style["h1"] and "Lato" in style["body"], style
-        page.keyboard.press("Tab")  # keyboard focus shows the 2px light ring (oxblood is only a signal)
+        assert style["bg"] == "rgb(15, 15, 15)" and style["primary"] == "rgb(255, 90, 69)", style
+        assert "Lexend" in style["h1"] and "Source Sans 3" in style["body"], style
+        page.keyboard.press("Tab")  # keyboard focus shows the 2px signal ring
         ring = page.evaluate("() => getComputedStyle(document.activeElement).outlineColor")
-        assert ring == "rgb(236, 230, 218)", ring
+        assert ring == "rgb(255, 90, 69)", ring
         page.get_by_role("link", name="Invoices").click()
         expect(page.get_by_role("heading", name="Invoices")).to_be_visible()
 
@@ -147,7 +147,12 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         page.locator("#upload-meeting").set_input_files(str(CASE / "transcript_2.txt"))
         expect(page.get_by_role("cell", name=re.compile(r"^transcript_2\.txt"))).to_be_visible()
         _process_latest(t, "transcript_2.txt", "model_2.json")
-        expect(page.get_by_role("button", name="Settle as Treasury")).to_be_visible(timeout=10_000)
+        # Still on Meetings (the step is pinned); Review now shows what needs you.
+        steps = page.get_by_role("navigation", name="Steps")
+        expect(steps.get_by_text(re.compile(r"need"))).to_be_visible(timeout=10_000)
+        steps.get_by_role("button", name=re.compile(r"Review")).click()
+        page.get_by_role("button", name=re.compile(r"^Meetings disagree Who does")).click()  # open one item
+        expect(page.get_by_role("button", name="Settle as Treasury")).to_be_visible()
         page.screenshot(path=str(SHOTS / "e2e-project.png"))
 
         # Merged map in the editor

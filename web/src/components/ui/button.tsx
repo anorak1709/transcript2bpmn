@@ -8,17 +8,17 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // the primary action: light on dark, used once per view (oxblood is kept for signals)
+        // the primary action: light on dark, used once per view (signal is kept for signals)
         // disabled goes neutral, not washed-out pink: "unavailable" must not read as another colour
         default:
-          "bg-primary text-primary-foreground hover:bg-ink/85 disabled:border-hairline disabled:bg-paper-shade disabled:text-graphite disabled:opacity-100",
-        outline: "border-control bg-sheet text-ink hover:bg-paper-shade aria-expanded:bg-paper-shade",
+          "bg-primary text-primary-foreground hover:bg-signal-hover disabled:border-line disabled:bg-raised disabled:text-fg-muted disabled:opacity-100",
+        outline: "border-control bg-surface text-fg hover:bg-raised aria-expanded:bg-raised",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
-        ghost: "text-ink hover:bg-paper-shade aria-expanded:bg-paper-shade",
+        ghost: "text-fg hover:bg-raised aria-expanded:bg-raised",
         destructive:
           // destructive = oxblood outline; the confirmation step does the rest (MASTER)
-          "border-oxblood bg-transparent text-oxblood hover:bg-oxblood-tint",
+          "border-signal bg-transparent text-signal hover:bg-signal-tint",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

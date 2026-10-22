@@ -16,30 +16,30 @@ import { api, setApiKey } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const NAV = [
-  { to: "/projects", label: "Projects" },
+  { to: "/projects", label: "Processes" },
   { to: "/settings", label: "Settings" },
 ]
 
-/** Masthead (MASTER: top bar): serif wordmark, small-caps sections, hairline beneath. */
+/** Top bar (MASTER): wordmark, two sections, account. */
 export function AppShell() {
   const qc = useQueryClient()
   const me = useQuery({ queryKey: ["me"], queryFn: api.me, staleTime: 60_000 })
   return (
-    <div className="flex min-h-svh flex-col bg-paper">
+    <div className="flex min-h-svh flex-col bg-bg">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-4 focus:z-50 focus:bg-sheet focus:px-3 focus:py-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-4 focus:z-50 focus:bg-surface focus:px-3 focus:py-2"
       >
         Skip to content
       </a>
-      <header className="border-b border-rule bg-paper">
-        <div className="mx-auto flex h-14 max-w-[1120px] items-center gap-3 px-4 sm:gap-8 sm:px-6">
+      <header className="border-b border-line bg-bg">
+        <div className="mx-auto flex h-14 max-w-[1120px] items-center gap-2 px-4 sm:gap-8 sm:px-6">
           <NavLink
             to="/projects"
-            className="serif inline-flex min-h-9 shrink-0 items-center text-[1.15rem] leading-none font-[560] tracking-[-0.01em] sm:text-[1.35rem]"
+            className="inline-flex min-h-9 shrink-0 items-center font-heading text-[1.05rem] leading-none font-semibold tracking-[-0.02em] sm:text-[1.15rem]"
           >
             <span>
-              Transcript <span className="text-graphite italic">to</span> BPMN
+              Transcript <span className="text-fg-muted">to</span> BPMN
             </span>
           </NavLink>
           <nav aria-label="Main" className="flex items-center gap-0 sm:gap-1">
@@ -49,8 +49,8 @@ export function AppShell() {
                 to={to}
                 className={({ isActive }) =>
                   cn(
-                    "smallcaps transition-quiet inline-flex h-9 items-center border-b-2 px-2 text-[0.95rem] font-bold",
-                    isActive ? "border-ink text-ink" : "border-transparent text-graphite hover:text-ink",
+                    "transition-quiet inline-flex h-14 items-center border-b-2 px-2 text-[0.95rem] font-medium sm:px-3",
+                    isActive ? "border-signal text-fg" : "border-transparent text-fg-muted hover:text-fg",
                   )
                 }
               >
@@ -61,20 +61,15 @@ export function AppShell() {
           <div className="ml-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="smallcaps text-graphite"
-                  aria-label="Signed in: account menu"
-                >
+                <Button variant="ghost" size="sm" className="text-fg-muted" aria-label="Signed in: account menu">
                   <KeyRound aria-hidden />{" "}
                   <span className="hidden max-w-48 truncate sm:inline">{me.data?.email ?? "Signed in"}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-64">
-                <DropdownMenuLabel className="font-normal text-graphite">
+                <DropdownMenuLabel className="font-normal text-fg-muted">
                   {me.data?.email ? `Signed in as ${me.data.email}` : "Signed in with an API key"}
-                  {me.data && <span className="block text-ink">{me.data.workspace.name}</span>}
+                  {me.data && <span className="block text-fg">{me.data.workspace.name}</span>}
                 </DropdownMenuLabel>
                 {(me.data?.workspaces.length ?? 0) > 1 && (
                   <>
@@ -117,10 +112,7 @@ export function AppShell() {
         </div>
       </header>
       {me.data?.sandbox && (
-        <p
-          role="status"
-          className="border-b border-hairline bg-paper-shade px-6 py-2 text-center text-sm text-graphite"
-        >
+        <p role="status" className="border-b border-line bg-raised px-6 py-2 text-center text-sm text-fg-muted">
           You're in a demo sandbox: explore, settle points, edit and export. AI processing is switched off, and this
           copy is deleted within a day.
         </p>
@@ -135,6 +127,6 @@ export function AppShell() {
 /** Document page: 1120px measure with generous margins (MASTER: compact tables in airy pages). */
 export function Page({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("mx-auto w-full max-w-[1120px] px-4 pt-10 pb-20 sm:px-6 sm:pt-12", className)}>{children}</div>
+    <div className={cn("mx-auto w-full max-w-[1120px] px-4 pt-12 pb-24 sm:px-8 sm:pt-16", className)}>{children}</div>
   )
 }

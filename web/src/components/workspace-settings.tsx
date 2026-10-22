@@ -32,26 +32,26 @@ export function Team() {
   if (me.data?.sandbox) return null
   return (
     <Section title="Team" id="team" aside="Everyone here sees every process">
-      <ul className="divide-y divide-hairline text-[0.95rem]">
+      <ul className="divide-y divide-line text-[0.95rem]">
         {(members.data ?? []).map((m) => (
           <li key={m.email} className="flex items-baseline justify-between gap-3 py-2">
             <span>{m.email}</span>
-            <span className="text-sm text-graphite">{m.role === "owner" ? "Owner" : "Member"}</span>
+            <span className="text-sm text-fg-muted">{m.role === "owner" ? "Owner" : "Member"}</span>
           </li>
         ))}
         {(invites.data ?? []).map((i) => (
           <li key={i.id} className="flex items-baseline justify-between gap-3 py-2">
-            <span className="text-graphite">{i.email}</span>
-            <span className="text-sm text-graphite">
+            <span className="text-fg-muted">{i.email}</span>
+            <span className="text-sm text-fg-muted">
               Invited {formatDay(i.created_at)} ·{" "}
-              <button type="button" className="underline hover:text-oxblood" onClick={() => cancel.mutate(i.id)}>
+              <button type="button" className="underline hover:text-signal" onClick={() => cancel.mutate(i.id)}>
                 Cancel
               </button>
             </span>
           </li>
         ))}
         {members.data?.length === 0 && (
-          <li className="py-2 text-sm text-graphite">This workspace is used with API keys only.</li>
+          <li className="py-2 text-sm text-fg-muted">This workspace is used with API keys only.</li>
         )}
       </ul>
       <form
@@ -110,7 +110,7 @@ export function ImproveDrafts() {
   const ev = evidence.data
   return (
     <Section title="Help improve the drafts" id="improve" aside="Opt-in, per workspace">
-      <p className="measure text-[0.95rem] text-graphite">
+      <p className="measure text-[0.95rem] text-fg-muted">
         {c?.total
           ? `People here have corrected the AI's drafts ${c.total} time${c.total === 1 ? "" : "s"} (${Object.entries(
               c.by_kind,
@@ -127,19 +127,19 @@ export function ImproveDrafts() {
             <input
               type="radio"
               name="share-corrections"
-              className="mt-1 accent-[var(--ink)]"
+              className="mt-1 accent-[var(--fg)]"
               checked={ws.data?.share_corrections === o.value}
               onChange={() => set.mutate(o.value)}
             />
             <span>
               {o.label}
-              <span className="block text-sm text-graphite">{o.detail}</span>
+              <span className="block text-sm text-fg-muted">{o.detail}</span>
             </span>
           </label>
         ))}
       </fieldset>
       {ev && ev.meetings > 0 && (
-        <p className="mt-6 text-sm text-graphite">
+        <p className="mt-6 text-sm text-fg-muted">
           Of {ev.meetings} meeting{ev.meetings === 1 ? "" : "s"} here, {ev.with_timers} describe waits or deadlines and{" "}
           {ev.with_subprocesses} describe separate sub-processes: the evidence for adding timer and sub-process steps to
           the drafts.

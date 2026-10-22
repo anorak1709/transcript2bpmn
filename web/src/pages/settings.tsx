@@ -64,10 +64,10 @@ function NewKey() {
         </Button>
       </form>
       {created && (
-        <div className="space-y-2 border-l-2 border-ink bg-sheet py-3 pr-3 pl-4" role="status">
+        <div className="space-y-2 border-l-2 border-fg bg-surface py-3 pr-3 pl-4" role="status">
           <p className="text-sm font-bold">Copy this key now. It won't be shown again.</p>
           <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 rounded-sm border border-hairline bg-paper px-2 py-1.5 font-mono text-xs break-all">
+            <code className="min-w-0 flex-1 rounded-sm border border-line bg-bg px-2 py-1.5 font-mono text-xs break-all">
               {created}
             </code>
             <Button
@@ -102,14 +102,14 @@ function RevokeButton({ k }: { k: ApiKey }) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-graphite hover:text-oxblood">
+        <Button variant="ghost" size="sm" className="text-fg-muted hover:text-signal">
           Revoke
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent className="bg-sheet">
+      <AlertDialogContent className="bg-surface">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-2xl">Revoke “{k.name}”?</AlertDialogTitle>
-          <AlertDialogDescription className="text-graphite">
+          <AlertDialogDescription className="text-fg-muted">
             Anything using this key stops working immediately.
             {k.current && " This is the key this browser is signed in with: you'll be signed out."}
           </AlertDialogDescription>
@@ -169,11 +169,11 @@ export function Settings() {
         <Section title="API keys" id="keys" aside="Only a hash of each key is stored">
           <NewKey />
           {keys.isPending ? (
-            <Skeleton className="mt-6 h-24 rounded-sm bg-paper-shade" />
+            <Skeleton className="mt-6 h-24 rounded-sm bg-raised" />
           ) : (
             <table className="mt-6 w-full text-[0.95rem]">
               <caption className="sr-only">API keys</caption>
-              <thead className="border-b border-hairline">
+              <thead className="border-b border-line">
                 <tr>
                   <th className={TH}>Name</th>
                   <th className={TH}>Key</th>
@@ -186,17 +186,17 @@ export function Settings() {
               </thead>
               <tbody>
                 {keys.data?.map((k) => (
-                  <tr key={k.id} className="border-b border-hairline">
+                  <tr key={k.id} className="border-b border-line">
                     <td className={`${TD} font-bold`}>{k.name}</td>
                     <td className={TD}>
-                      <code className="font-mono text-xs text-graphite">t2b_{k.prefix}_…</code>
+                      <code className="font-mono text-xs text-fg-muted">t2b_{k.prefix}_…</code>
                     </td>
-                    <td className={`${TD} tabular hidden text-sm text-graphite sm:table-cell`}>
+                    <td className={`${TD} tabular hidden text-sm text-fg-muted sm:table-cell`}>
                       {formatDay(k.created_at)}
                     </td>
                     <td className={`${TD} text-sm`}>
                       {k.revoked_at ? (
-                        <span className="text-graphite">Revoked {formatDay(k.revoked_at)}</span>
+                        <span className="text-fg-muted">Revoked {formatDay(k.revoked_at)}</span>
                       ) : k.current ? (
                         "Active · this browser"
                       ) : (
@@ -216,20 +216,20 @@ export function Settings() {
 
         <Section title="This month" id="usage">
           {usage.isPending ? (
-            <Skeleton className="h-20 rounded-sm bg-paper-shade" />
+            <Skeleton className="h-20 rounded-sm bg-raised" />
           ) : usage.data ? (
             <dl className="space-y-5">
               <div>
-                <dt className="text-sm text-graphite">Meetings processed</dt>
-                <dd className="serif tabular text-[2.5rem] leading-none">
+                <dt className="text-sm text-fg-muted">Meetings processed</dt>
+                <dd className="tabular text-[2.5rem] leading-none">
                   {usage.data.jobs_this_month}
                   {usage.data.monthly_jobs_quota != null && (
-                    <span className="text-2xl text-graphite"> of {usage.data.monthly_jobs_quota}</span>
+                    <span className="text-2xl text-fg-muted"> of {usage.data.monthly_jobs_quota}</span>
                   )}
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-graphite">Rate limits, per key</dt>
+                <dt className="text-sm text-fg-muted">Rate limits, per key</dt>
                 <dd className="tabular text-sm">
                   {usage.data.rate_limit_per_minute} requests a minute; {usage.data.rate_limit_heavy_per_minute} for
                   uploads, processing, chat edits and image exports
@@ -246,11 +246,11 @@ export function Settings() {
           aside="By API key · meeting content is never recorded here"
         >
           {audit.isPending ? (
-            <Skeleton className="h-32 rounded-sm bg-paper-shade" />
+            <Skeleton className="h-32 rounded-sm bg-raised" />
           ) : (
             <table className="w-full text-[0.95rem]">
               <caption className="sr-only">Recent activity</caption>
-              <thead className="border-b border-hairline">
+              <thead className="border-b border-line">
                 <tr>
                   <th className={TH}>When</th>
                   <th className={TH}>What</th>
@@ -263,15 +263,15 @@ export function Settings() {
                   const key = keys.data?.find((k) => k.id === a.api_key_id)
                   const d = details(a.details)
                   return (
-                    <tr key={i} className="border-b border-hairline">
-                      <td className={`${TD} tabular text-sm whitespace-nowrap text-graphite`}>
+                    <tr key={i} className="border-b border-line">
+                      <td className={`${TD} tabular text-sm whitespace-nowrap text-fg-muted`}>
                         {formatDate(a.created_at)}
                       </td>
                       <td className={TD}>{ACTION_LABEL[a.action] ?? a.action}</td>
-                      <td className={`${TD} hidden max-w-md truncate text-sm text-graphite md:table-cell`} title={d}>
+                      <td className={`${TD} hidden max-w-md truncate text-sm text-fg-muted md:table-cell`} title={d}>
                         {d}
                       </td>
-                      <td className={`${TD} hidden text-sm text-graphite sm:table-cell`}>
+                      <td className={`${TD} hidden text-sm text-fg-muted sm:table-cell`}>
                         {key ? key.name : a.api_key_id ? "another key" : "the system"}
                       </td>
                     </tr>

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { ArrowRight } from "lucide-react"
 import { useState } from "react"
 import { Link, useNavigate } from "react-router"
 import { toast } from "sonner"
@@ -18,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/lib/api"
-import { countOf, formatDay, roman } from "@/lib/format"
+import { countOf, formatDay } from "@/lib/format"
 
 function NewProjectDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const qc = useQueryClient()
@@ -43,7 +44,7 @@ function NewProjectDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
       <DialogTrigger asChild>
         <Button>New process</Button>
       </DialogTrigger>
-      <DialogContent className="bg-sheet">
+      <DialogContent className="bg-surface">
         <form
           onSubmit={(e) => {
             e.preventDefault()
@@ -53,7 +54,7 @@ function NewProjectDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
         >
           <DialogHeader>
             <DialogTitle className="text-2xl">Open a new process file</DialogTitle>
-            <DialogDescription className="text-graphite">
+            <DialogDescription className="text-fg-muted">
               One file per process. Every meeting about it is merged into a single map.
             </DialogDescription>
           </DialogHeader>
@@ -86,9 +87,9 @@ function NewProjectDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                 aria-invalid={retentionInvalid}
                 aria-describedby="retention-help"
               />
-              <span className="text-sm text-graphite">days</span>
+              <span className="text-sm text-fg-muted">days</span>
             </div>
-            <p id="retention-help" className="text-sm text-graphite">
+            <p id="retention-help" className="text-sm text-fg-muted">
               Recordings and transcript text are deleted after this many days. Maps are kept.
             </p>
           </div>
@@ -114,65 +115,65 @@ export function Projects() {
   return (
     <Page>
       <PageHeader
-        eyebrow="Index"
         title="Processes"
-        revision={data ? `${countOf(data.length, "process", "processes")} on file` : undefined}
+        revision={data ? countOf(data.length, "process", "processes") : undefined}
         actions={<NewProjectDialog open={creating} onOpenChange={setCreating} />}
       />
       {isPending ? (
         <div className="space-y-3" aria-busy>
           {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="h-16 rounded-sm bg-paper-shade" />
+            <Skeleton key={i} className="h-16 rounded-sm bg-raised" />
           ))}
         </div>
       ) : error ? (
-        <p role="alert" className="text-oxblood">
+        <p role="alert" className="text-signal">
           Couldn't load the index: {error.message}
         </p>
       ) : data.length === 0 ? (
         <div className="measure py-10">
-          <p className="serif text-2xl">Nothing on file yet.</p>
-          <p className="mt-2 text-graphite">
+          <p className="font-heading text-2xl">No processes yet.</p>
+          <p className="mt-2 text-fg-muted">
             Open a file for a process, then add a meeting transcript or recording. The map is drafted from what was
             said, and every step keeps a reference to the words behind it.
           </p>
           <Button className="mt-6" onClick={() => setCreating(true)}>
-            Open the first file
+            Create the first process
           </Button>
         </div>
       ) : (
-        <ol className="border-t border-hairline">
-          {data.map((p, i) => (
-            <li key={p.id} className="border-b border-hairline">
-              <Link
-                to={`/projects/${p.id}`}
-                className="transition-quiet group grid grid-cols-[2.5rem_1fr_auto] items-baseline gap-x-4 px-2 py-5 hover:bg-paper-shade"
-              >
-                <span className="serif tabular text-lg text-graphite" aria-hidden>
-                  {roman(i + 1)}.
-                </span>
-                <span className="min-w-0">
-                  <span className="serif block truncate text-[1.6rem] leading-tight group-hover:underline group-hover:decoration-1 group-hover:underline-offset-4">
-                    {p.name}
+        <ul className="border-t border-line">
+          {data.map((p) => {
+            const needs = p.open_conflicts + p.open_policy_differences + p.open_gaps
+            return (
+              <li key={p.id} className="border-b border-line">
+                <Link
+                  to={`/projects/${p.id}`}
+                  className="transition-quiet group flex items-center gap-6 py-6 hover:bg-surface sm:px-3"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-heading text-[1.5rem] leading-tight font-semibold">
+                      {p.name}
+                    </span>
+                    <span className="tabular mt-1 block text-fg-muted">
+                      {countOf(p.transcripts.filter((t) => t.purpose === "meeting").length, "meeting")}
+                      {p.revised_at ? ` · revised ${formatDay(p.revised_at)}` : " · no map yet"}
+                    </span>
                   </span>
-                  <span className="tabular mt-1 block text-sm text-graphite">
-                    {countOf(p.transcripts.filter((t) => t.purpose === "meeting").length, "meeting")}
-                    {p.revised_at ? ` · revised ${formatDay(p.revised_at)}` : " · no map yet"}
-                    {p.map_version ? ` · v${p.map_version}` : ""}
-                    {p.retention_days ? ` · content kept ${p.retention_days} days` : ""}
+                  <span className="text-right whitespace-nowrap">
+                    {needs > 0 ? (
+                      <span className="font-semibold text-signal">
+                        {needs} need{needs === 1 ? "s" : ""} you
+                      </span>
+                    ) : p.merged_map_id ? (
+                      <span className="text-fg-muted">All settled</span>
+                    ) : null}
                   </span>
-                </span>
-                <span className="text-right text-sm whitespace-nowrap">
-                  {p.open_conflicts > 0 ? (
-                    <span className="text-oxblood">{countOf(p.open_conflicts, "point").toLowerCase()} to settle</span>
-                  ) : p.merged_map_id ? (
-                    <span className="text-graphite">Settled</span>
-                  ) : null}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ol>
+                  <ArrowRight className="size-5 shrink-0 text-fg-subtle group-hover:text-fg" aria-hidden />
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
       )}
     </Page>
   )

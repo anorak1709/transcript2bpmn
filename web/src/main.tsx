@@ -61,7 +61,7 @@ const router = createBrowserRouter(
         {
           path: "projects/:projectId/live",
           element: (
-            <Suspense fallback={<Skeleton className="m-6 h-[70svh] rounded-sm bg-paper-shade" />}>
+            <Suspense fallback={<Skeleton className="m-6 h-[70svh] rounded-sm bg-raised" />}>
               <LivePage />
             </Suspense>
           ),
@@ -69,7 +69,7 @@ const router = createBrowserRouter(
         {
           path: "maps/:mapId",
           element: (
-            <Suspense fallback={<Skeleton className="m-6 h-[70svh] rounded-sm bg-paper-shade" />}>
+            <Suspense fallback={<Skeleton className="m-6 h-[70svh] rounded-sm bg-raised" />}>
               <MapEditor />
             </Suspense>
           ),

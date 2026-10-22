@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { api } from "@/lib/api"
 import { formatDay, ROLE_LABEL } from "@/lib/format"
-import type { Gap, Project, Signoff, SignoffStatus, SpeakerRole } from "@/lib/types"
+import type { Project, Signoff, SignoffStatus, SpeakerRole } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 /** Drop area for files. Meetings and policy documents share it; only what's accepted differs. */
@@ -72,12 +72,12 @@ export function AddFiles({
       }}
       className={cn(
         "transition-quiet mt-4 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-dashed px-4 py-4",
-        dragging ? "border-ink bg-paper-shade" : "border-rule",
+        dragging ? "border-fg bg-raised" : "border-line-strong",
       )}
     >
       <div>
-        <p className="serif text-[1.05rem] italic">{prompt}</p>
-        <p className="text-xs text-graphite">{hint}</p>
+        <p className="text-[1.05rem]">{prompt}</p>
+        <p className="text-xs text-fg-muted">{hint}</p>
       </div>
       <input
         ref={input}
@@ -112,7 +112,7 @@ export function Speakers({ projectId, refresh }: { projectId: string; refresh: u
     onError: (e) => toast.error(e.message),
   })
   if (!speakers.data?.length) {
-    return <p className="py-2 text-sm text-graphite">Speakers appear here once a meeting is processed.</p>
+    return <p className="py-2 text-sm text-fg-muted">Speakers appear here once a meeting is processed.</p>
   }
   return (
     <table className="w-full text-[0.95rem]">
@@ -125,10 +125,10 @@ export function Speakers({ projectId, refresh }: { projectId: string; refresh: u
       </thead>
       <tbody>
         {speakers.data.map((s) => (
-          <tr key={s.name} className="border-b border-hairline">
+          <tr key={s.name} className="border-b border-line">
             <td className="py-2 pr-3">
               <span className="font-bold">{s.name}</span>
-              <span className="tabular block text-xs text-graphite">
+              <span className="tabular block text-xs text-fg-muted">
                 {s.lines} line{s.lines === 1 ? "" : "s"} · {s.meetings} meeting{s.meetings === 1 ? "" : "s"}
               </span>
             </td>
@@ -141,7 +141,7 @@ export function Speakers({ projectId, refresh }: { projectId: string; refresh: u
                 value={s.role ?? ""}
                 disabled={set.isPending}
                 onChange={(e) => set.mutate({ name: s.name, role: (e.target.value || null) as SpeakerRole | null })}
-                className="h-8 rounded-sm border border-control bg-sheet px-2 text-sm text-ink"
+                className="h-8 rounded-sm border border-control bg-surface px-2 text-sm text-fg"
               >
                 <option value="">Role not set</option>
                 {(Object.keys(ROLE_LABEL) as SpeakerRole[]).map((r) => (
@@ -155,55 +155,6 @@ export function Speakers({ projectId, refresh }: { projectId: string; refresh: u
         ))}
       </tbody>
     </table>
-  )
-}
-
-const GAP_LABEL: Record<Gap["kind"], string> = {
-  one_outcome: "Only one outcome",
-  no_owner: "No owner",
-  dead_end: "Leads nowhere",
-  no_trigger: "Nothing leads here",
-  no_exception: "No rejection path",
-}
-
-/** What nobody said: decisions with one outcome, steps without an owner, dead ends, checks
- *  with no "what if it fails". */
-export function Gaps({ projectId, refresh }: { projectId: string; refresh: unknown }) {
-  const qc = useQueryClient()
-  const gaps = useQuery({ queryKey: ["gaps", projectId, refresh], queryFn: () => api.gaps(projectId) })
-  const dismiss = useMutation({
-    mutationFn: (id: string) => api.dismissGap(projectId, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["gaps", projectId] }),
-    onError: (e) => toast.error(e.message),
-  })
-  if (!gaps.data) return null
-  if (!gaps.data.length) {
-    return <p className="serif py-2 text-[1.05rem] text-graphite italic">No gaps found. Every path has an end.</p>
-  }
-  return (
-    <ul className="divide-y divide-hairline">
-      {gaps.data.map((g) => (
-        <li key={g.id} className="grid grid-cols-[2rem_1fr_auto] gap-x-2 py-3">
-          <span className="serif pt-0.5 text-lg leading-none text-graphite" aria-hidden>
-            ?
-          </span>
-          <div className="min-w-0">
-            <h3 className="label font-sans">{GAP_LABEL[g.kind]}</h3>
-            <p className="serif text-[1.05rem] leading-snug">{g.description}</p>
-            <p className="mt-0.5 text-sm text-graphite">Ask: {g.question}</p>
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="self-start text-graphite"
-            disabled={dismiss.isPending}
-            onClick={() => dismiss.mutate(g.id)}
-          >
-            Not a gap
-          </Button>
-        </li>
-      ))}
-    </ul>
   )
 }
 
@@ -249,18 +200,18 @@ function RequestSignoff({ project }: { project: Project }) {
           Ask someone to sign off…
         </Button>
       </DialogTrigger>
-      <DialogContent className="bg-sheet">
+      <DialogContent className="bg-surface">
         {link ? (
           <div className="space-y-4">
             <DialogHeader>
               <DialogTitle className="text-2xl">Send this link to {name}</DialogTitle>
-              <DialogDescription className="text-graphite">
+              <DialogDescription className="text-fg-muted">
                 It shows only their part of the map and needs no account. Copy it now: it isn't shown again. It works
                 for 30 days, and you can withdraw it at any time.
               </DialogDescription>
             </DialogHeader>
             <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 rounded-sm border border-hairline bg-paper px-2 py-1.5 font-mono text-xs break-all">
+              <code className="min-w-0 flex-1 rounded-sm border border-line bg-bg px-2 py-1.5 font-mono text-xs break-all">
                 {link}
               </code>
               <Button
@@ -290,7 +241,7 @@ function RequestSignoff({ project }: { project: Project }) {
           >
             <DialogHeader>
               <DialogTitle className="text-2xl">Ask for sign-off</DialogTitle>
-              <DialogDescription className="text-graphite">
+              <DialogDescription className="text-fg-muted">
                 They review only the steps in the lanes you choose, and approve or ask for changes. Their answer is
                 recorded with the map version they saw.
               </DialogDescription>
@@ -315,7 +266,7 @@ function RequestSignoff({ project }: { project: Project }) {
                   <label key={l.id} className="flex items-center gap-2 text-[0.95rem]">
                     <input
                       type="checkbox"
-                      className="size-4 accent-[var(--ink)]"
+                      className="size-4 accent-[var(--fg)]"
                       checked={lanes.includes(l.id)}
                       onChange={(e) => setLanes(e.target.checked ? [...lanes, l.id] : lanes.filter((x) => x !== l.id))}
                     />
@@ -323,7 +274,7 @@ function RequestSignoff({ project }: { project: Project }) {
                   </label>
                 ))
               ) : (
-                <p className="text-sm text-graphite">Loading lanes…</p>
+                <p className="text-sm text-fg-muted">Loading lanes…</p>
               )}
             </fieldset>
             <DialogFooter>
@@ -356,7 +307,7 @@ export function Signoffs({ project }: { project: Project }) {
       {list.length ? (
         <table className="w-full text-[0.95rem]">
           <caption className="sr-only">Sign-off requests</caption>
-          <thead className="border-b border-hairline">
+          <thead className="border-b border-line">
             <tr>
               <th className="label py-2 pr-3 text-left font-sans">Who</th>
               <th className="label hidden py-2 pr-3 text-left font-sans sm:table-cell">Their part</th>
@@ -372,32 +323,32 @@ export function Signoffs({ project }: { project: Project }) {
               const stale =
                 s.decided_version != null && s.current_version != null && s.current_version > s.decided_version
               return (
-                <tr key={s.id} className="border-b border-hairline align-baseline">
+                <tr key={s.id} className="border-b border-line align-baseline">
                   <td className="py-2.5 pr-3 font-bold">{s.name}</td>
-                  <td className="hidden py-2.5 pr-3 text-sm text-graphite sm:table-cell">{s.lanes.join(", ")}</td>
+                  <td className="hidden py-2.5 pr-3 text-sm text-fg-muted sm:table-cell">{s.lanes.join(", ")}</td>
                   <td className="py-2.5 pr-3 text-sm">
                     <span className="inline-flex items-center gap-1.5">
                       <Icon className="size-3.5" aria-hidden /> {text}
                       {s.decided_at && (
-                        <span className="text-graphite">
+                        <span className="text-fg-muted">
                           {" "}
                           · {formatDay(s.decided_at)}, v{s.decided_version}
                         </span>
                       )}
                     </span>
                     {stale && (
-                      <span className="block text-xs text-oxblood">
+                      <span className="block text-xs text-signal">
                         The map has changed since (now v{s.current_version}).
                       </span>
                     )}
-                    {s.comment && <span className="serif mt-0.5 block text-[0.98rem] italic">“{s.comment}”</span>}
+                    {s.comment && <span className="mt-0.5 block text-[0.98rem]">“{s.comment}”</span>}
                   </td>
                   <td className="py-1 text-right">
                     {(s.status === "pending" || s.status === "approved" || s.status === "changes_requested") && (
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-graphite hover:text-oxblood"
+                        className="text-fg-muted hover:text-signal"
                         disabled={revoke.isPending}
                         onClick={() => revoke.mutate(s.id)}
                       >
@@ -411,7 +362,7 @@ export function Signoffs({ project }: { project: Project }) {
           </tbody>
         </table>
       ) : (
-        <p className="text-sm text-graphite">
+        <p className="text-sm text-fg-muted">
           Nobody has been asked yet. Send each person a private link to confirm just their part of the map.
         </p>
       )}

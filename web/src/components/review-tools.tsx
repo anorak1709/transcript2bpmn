@@ -29,10 +29,10 @@ export function ReviewQueue({
   const open = q.data.filter((i) => !i.reviewed)
   const flagged = open.filter((i) => i.reason)
   const shown = limit ? open.slice(0, limit) : q.data
-  if (!q.data.length) return <p className="text-graphite">No AI-drafted steps to check.</p>
+  if (!q.data.length) return <p className="text-fg-muted">No AI-drafted steps to check.</p>
   return (
     <div>
-      <p className="mb-2 text-sm text-graphite">
+      <p className="mb-2 text-sm text-fg-muted">
         {flagged.length
           ? `${flagged.length} step${flagged.length === 1 ? "" : "s"} the AI is least sure of, then the rest.`
           : open.length
@@ -40,7 +40,7 @@ export function ReviewQueue({
             : "Every step has been checked."}{" "}
         {q.data.length - open.length} of {q.data.length} checked.
       </p>
-      <ul className="divide-y divide-hairline">
+      <ul className="divide-y divide-line">
         {shown.map((i) => (
           <li key={i.node_id} className="flex items-start gap-3 py-2.5">
             <div className="min-w-0 flex-1">
@@ -49,12 +49,12 @@ export function ReviewQueue({
                   {i.name}
                 </button>
               ) : (
-                <span className={cn(i.reviewed && "text-graphite")}>{i.name}</span>
+                <span className={cn(i.reviewed && "text-fg-muted")}>{i.name}</span>
               )}
-              <span className="block text-sm text-graphite">
+              <span className="block text-sm text-fg-muted">
                 {i.lane}
                 {i.reason ? (
-                  <span className="text-oxblood"> · {i.reason}</span>
+                  <span className="text-signal"> · {i.reason}</span>
                 ) : (
                   ` · ${Math.round(i.confidence * 100)}%`
                 )}
@@ -79,7 +79,7 @@ export function ReviewQueue({
         ))}
       </ul>
       {limit && open.length > limit && (
-        <p className="mt-2 text-sm text-graphite">And {open.length - limit} more in the map editor's Review tab.</p>
+        <p className="mt-2 text-sm text-fg-muted">And {open.length - limit} more in the map editor's Review tab.</p>
       )}
     </div>
   )
@@ -104,13 +104,13 @@ export function Improvements({ mapId, aiAvailable }: { mapId: string; aiAvailabl
   const all = [...(rules.data ?? []), ...(ai ?? [])]
   return (
     <div>
-      {all.length === 0 && rules.data && <p className="text-graphite">No obvious improvements from the map's shape.</p>}
-      <ul className="divide-y divide-hairline">
+      {all.length === 0 && rules.data && <p className="text-fg-muted">No obvious improvements from the map's shape.</p>}
+      <ul className="divide-y divide-line">
         {all.map((s) => (
           <li key={s.id} className="py-3">
             <p className="label">{KIND_LABEL[s.kind]}</p>
-            <p className="serif text-[1.05rem] leading-snug">{s.title}</p>
-            <p className="mt-0.5 text-sm text-graphite">{s.detail}</p>
+            <p className="text-[1.05rem] leading-snug">{s.title}</p>
+            <p className="mt-0.5 text-sm text-fg-muted">{s.detail}</p>
           </li>
         ))}
       </ul>
@@ -119,7 +119,7 @@ export function Improvements({ mapId, aiAvailable }: { mapId: string; aiAvailabl
           <Button size="sm" variant="outline" disabled={ask.isPending} onClick={() => ask.mutate()}>
             {ask.isPending ? "Thinking…" : "Ask AI for more ideas"}
           </Button>
-          <span className="text-xs text-graphite">Uses AI credits; the ideas above are free.</span>
+          <span className="text-xs text-fg-muted">Uses AI credits; the ideas above are free.</span>
         </div>
       )}
     </div>

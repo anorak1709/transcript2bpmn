@@ -68,6 +68,7 @@ class ProjectOut(BaseModel):
     revised_at: datetime | None  # when the merged map last changed
     open_conflicts: int  # meetings disagreeing with each other
     open_policy_differences: int
+    open_gaps: int = 0
     transcripts: list[TranscriptOut]
 
 
@@ -197,6 +198,7 @@ def get_project(project_id: str, db: DB) -> ProjectOut:
         revised_at=revised,
         open_conflicts=open_by_origin.count("meeting"),
         open_policy_differences=open_by_origin.count("policy"),
+        open_gaps=len(_gaps(db, p)),
         transcripts=[_transcript_out(t, job=latest.get(t.id)) for t in transcripts],
     )
 

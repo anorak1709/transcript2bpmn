@@ -121,7 +121,7 @@ export function LivePage() {
     <Page>
       <PageHeader
         eyebrow={
-          <Link to={`/projects/${projectId}`} className="hover:text-ink">
+          <Link to={`/projects/${projectId}`} className="hover:text-fg">
             ← Process file
           </Link>
         }
@@ -146,7 +146,7 @@ export function LivePage() {
       {tid && (
         <div className="grid gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_360px]">
           <Section title="Draft map" aside={recording ? "Updates after each chunk" : undefined}>
-            <div className="h-[60svh] border border-hairline">
+            <div className="h-[60svh] border border-line">
               {draft.data ? (
                 <BpmnCanvas
                   xml={draft.data.bpmn_xml}
@@ -155,7 +155,7 @@ export function LivePage() {
                   onImportError={() => undefined}
                 />
               ) : (
-                <p className="p-6 text-graphite">The first draft appears after the first chunk is transcribed.</p>
+                <p className="p-6 text-fg-muted">The first draft appears after the first chunk is transcribed.</p>
               )}
             </div>
           </Section>
@@ -169,7 +169,7 @@ export function LivePage() {
                   {l.text}
                 </li>
               ))}
-              {lines.length === 0 && <li className="text-graphite">Listening…</li>}
+              {lines.length === 0 && <li className="text-fg-muted">Listening…</li>}
             </ol>
           </Section>
         </div>

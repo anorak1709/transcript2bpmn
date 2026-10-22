@@ -1,107 +1,85 @@
 # Transcript to BPMN: design system (MASTER)
 
-Global source of truth for the web app (`web/`). Page-specific overrides go in `pages/<page>.md`.
-Every decision below was chosen by the product owner from researched options, not defaulted;
-the source of each is noted so it can be revisited deliberately.
+Source of truth for the web app. Tokens live in `web/src/index.css`. Page-specific overrides would go
+in `pages/`; there are none.
 
-## Direction: Process dossier
+## Direction: Swiss workbench (2026-10-23)
 
-The product's output is process documentation, so the UI reads like a consulting deliverable or
-SOP binder: paper, ink, a reviewer's red pen. Calm and editorial, never "dashboard SaaS".
+Chosen by the user after "the page looks too cluttered". Minimalism & Swiss style, dark only:
+generous white space, a strict grid, large clear type, near-black text surfaces, and **one** strong accent.
+It replaces the "process dossier" look (serif, small caps, oxblood, roman numerals); all of that ornament is gone.
 
-- Style basis: **E-Ink / Paper**, inverted: the dossier read at night (warm near-black paper,
-  warm light ink). Light version was built first; the owner preferred dark (2026-10-16).
-- Users: **both, analyst-first**. Power and density where analysts work (tables, editor);
-  review and export always obvious for occasional reviewers.
-- Theme: **dark only**. No light mode, no theme switcher. Exports (BPMN/SOP/PNG/SVG) stay
-  standard light styling; only the on-screen editor is themed.
+## Structure: guided steps
 
-## Colour rule (2026-10-20, kept from the minimal pass; everything else is the dossier below)
+- A process is four steps: **1 Meetings → 2 Review → 3 Improve → 4 Share**, one on screen at a time.
+  - Meetings: meetings, policy documents, speakers, the live interview.
+  - Review: disagreements, policy differences, gaps, and checking the AI's draft.
+  - Improve: improvement suggestions.
+  - Share: sign-off, exports, the next meeting's agenda, and deleting the process.
+- The step bar shows each step's state in words: done (✓ filled box), **needs you** (signal red), or not started.
+- **Open where you're needed.** With no `?step=`, the page opens on the first step that needs action and pins it in the
+  URL, so polling never moves the person off the step they're on.
+- Every step ends with **Next: … →**. "Open the map" always sits in the page header.
+- **Review is a short list; open one item.** Each row is a kind label, a one-line question and a one-line subtitle
+  (the options, or what to ask). Opening a row shows the evidence and the choices. Only one row is open at a time.
 
-Monochrome + one signal. Primary buttons are light-on-dark (ink #ECE6DA on paper, 14.9:1) and
-the focus ring is ink; the diagram's selection and palette highlights are ink. Oxblood appears
-only on what needs attention: open disagreements and policy differences (numerals and counts),
-disputed steps on the diagram, errors, the "changed elsewhere" banner, destructive actions.
-Where the table below lists oxblood-deep as the primary button, this rule wins.
+## Colour (contrast measured against bg #0F0F0F)
 
-## Colour (all contrast measured against paper #151311)
+| Token         | Hex     | Use                                                    | Contrast       |
+| ------------- | ------- | ------------------------------------------------------ | -------------- |
+| `bg`          | #0F0F0F | page                                                   |                |
+| `surface`     | #171717 | hover rows, current step, cards, the diagram's shapes  |                |
+| `raised`      | #202020 | menus, skeletons, selected                             |                |
+| `fg`          | #F4F4F2 | text                                                   | 17.4           |
+| `fg-muted`    | #B3B3AF | secondary text, labels                                 | 9.1            |
+| `fg-subtle`   | #94948F | tertiary (quote numbers, arrows)                       | 6.3            |
+| `control`     | #77776F | input and outline-button borders                       | 4.2 (≥3 UI)    |
+| `line`        | #2B2B2A | dividers (decorative)                                  |                |
+| `line-strong` | #3D3D3B | stronger dividers (decorative)                         |                |
+| `signal`      | #FF5A45 | **the one accent**                                     | 6.2            |
+| `signal-tint` | #2E1714 | text selection                                         |                |
 
-| Token | Value | Use | Contrast |
-|---|---|---|---|
-| `--paper` (background) | `#151311` | page | |
-| `--sheet` (card) | `#1D1A17` | sheets, inputs, diagram shapes (set apart by hairline, not shadow) | ink 13.9:1 |
-| `--paper-shade` (muted) | `#26221E` | hover, selected rows, inset areas | ink 12.7:1 |
-| `--ink` (foreground) | `#ECE6DA` | text, diagram strokes | 14.9:1 |
-| `--graphite` (muted-foreground) | `#A8A196` | secondary text, labels | 7.2:1 |
-| `--oxblood` (accent) | `#D4716A` | **only** disagreements, focus ring, destructive outline, marks | 5.6:1 (on tint 4.7:1) |
-| `--oxblood-deep` (primary) | `#8B2E2A` | filled primary button (hover `#9E3732`) | ink on it 6.7:1 |
-| `--oxblood-tint` | `#33201D` | disagreement highlight background | |
-| `--hairline` | `#2C2824` | decorative rules, sheet borders | decorative |
-| `--rule` | `#3B3631` | stronger decorative rules (section dividers) | decorative |
-| `--control` | `#7A7368` | form-control borders (meaningful boundary) | 4.0:1 (≥3:1) |
-
-Rules
-- Oxblood is scarce on purpose: if everything is red, nothing is. Never use it for decoration.
-- **Statuses are monochrome + glyphs** (Lucide SVG, never emoji): done = check, processing =
-  half-filled circle (Contrast icon) + "Processing…", failed = X, not processed = empty circle.
-  Text always accompanies the glyph (colour/shape never the only signal).
-- Destructive actions: oxblood outline + confirmation step (type-to-confirm for projects).
+**Signal red is used only** for "needs you" counts, the current step, the main button (one per view, dark #0F0F0F text
+on red, 6.2:1), the focus ring, and disputed steps on the map. Never for decoration. Status is always given as glyph +
+words, never as colour alone.
 
 ## Typography
 
-Pairing **"Legal Professional"** (ui-ux-pro-max typography DB: formal documents, contracts):
+- Headings and labels: **Lexend** (variable, self-hosted via @fontsource-variable/lexend 5.3.0). Weight 600,
+  tracking -0.015em.
+- Text: **Source Sans 3** (variable, @fontsource-variable/source-sans-3 5.3.0). 16px base, line-height 1.55.
+- Page title 36px, or 48px from sm up. Step heading 28px. Review row question 18px, Lexend 500.
+- `.label`: Lexend 12px, weight 500, uppercase, tracking 0.08em, fg-muted. It replaces the old small caps.
+- No serif, no italics, no roman numerals: points are plain numbers.
 
-- Headings / titles / wordmark / quotes: **EB Garamond** (500–600; italic for quoted speech).
-- Body / UI / tables: **Lato** (400, 700; italic 400).
-- Self-hosted via @fontsource (CSP: `font-src 'self'`), `font-display: swap`.
-- Key material that must be character-exact (API keys) uses the system monospace stack.
+## Layout
 
-Scale (px): 12 · 13 · 14 · 16 · 20 · 28 · 40. Body 14–16 / line-height 1.5; headings 1.15–1.25.
+- Content max-width 1120px with a 16px gutter on mobile and 32px from sm up. Steps' content max-width 880px.
+- Space separates the groups (56px between sections); 1px `line` dividers, not boxes.
+- Corners are near-square: 2–4px radius.
+- No horizontal scroll at 375px (checked).
 
-Details ("full dossier", owner's choice)
-- Section labels in **small caps** (`font-variant-caps: all-small-caps`, tracking +0.06em, graphite).
-- **Hairline rules** under page titles and between sections; no drop shadows anywhere.
-- Disagreements numbered with **lower-case roman numerals** (i., ii., iii.); the same numeral
-  marks the disputed step on the diagram.
-- Meetings listed with a **pilcrow ¶**.
-- Source quotes shown **footnote-style**: italic serif quote, small-caps attribution
-  (speaker · timestamp · meeting).
-- Page headers carry a **revision line**: "Two meetings · revised 14 Oct 2026 · v12".
-- Data columns use **tabular figures** (`font-variant-numeric: tabular-nums`).
-- Prose is capped at **~68ch** per line.
+## Motion
 
-## Layout & density
+150ms in and 100ms out, on colour and opacity only. Honour `prefers-reduced-motion`.
 
-- **Top-bar masthead** (owner's choice): wordmark left, Projects / Settings in small caps,
-  account right; a hairline beneath. No sidebar.
-- **Compact tables inside airy pages** (owner's choice): generous page margins and headings;
-  tables with 36–40px rows for scanning.
-- Page width: 1120px for document pages; the editor uses the full width.
-- Corner radius: 2–4px (paper, not pills).
+## The diagram
 
-## Motion: minimal
+bpmn-js is themed for rendering only: surface-coloured shapes, fg strokes and Source Sans labels. Disputed steps have a
+signal outline and a small numbered tag. Saved XML and exports keep standard BPMN styling.
 
-- Only colour/opacity transitions, **150ms** (enter) / **100ms** (exit), ease-out on enter.
-- Dialogs and menus fade; no zoom, no bounce, no decorative movement. The sheet (version
-  history) may slide because it shows where it came from.
-- `prefers-reduced-motion: reduce` → all transitions off.
+## Accessibility
 
-## The diagram ("themed to match")
-
-- bpmn-js renders on paper with ink strokes and EB Garamond labels; sheet (#1D1A17) fill for tasks, light ink strokes.
-- Steps involved in an open disagreement get an oxblood outline and the disagreement's numeral.
-- **Exports stay standard BPMN** (server-side renderer is untouched).
-
-## Accessibility (pre-delivery, from ui-ux-pro-max quick reference)
-
-- Text ≥4.5:1, meaningful non-text ≥3:1 (values above are measured).
-- Visible focus: 2px oxblood ring with 2px offset on every interactive element.
-- Pointer targets ≥24×24 CSS px (buttons 36px tall); icon-only buttons have labels.
-- Real heading hierarchy, labelled fields, live regions for job status and chat replies.
-- Reduced motion honoured.
+- Text contrast is ≥ 4.5:1 everywhere (see the table); UI borders are ≥ 3:1.
+- One visible focus style: a 2px signal outline with a 2px offset.
+- Expandable review rows use `aria-expanded` and `aria-controls`; the step bar uses `aria-current="step"`.
+- Every icon is `aria-hidden` next to visible text; the touch target is ≥ 36px, and the step and row buttons span the
+  full width.
+- Visible labels on every field; errors sit next to the field (`role="alert"`).
 
 ## Avoid
 
-- Slate/blue SaaS palettes, gradients, glassmorphism, drop shadows, pill-shaped everything.
-- Dark mode, theme toggles.
-- Colour as the only signal; emoji as icons; oxblood used decoratively.
+- Showing every section at once. One step per screen.
+- More than one red element competing in a view, other than "needs you" counts.
+- Chips, pills and gradients; the "generic SaaS" slate-and-teal look that was rejected.
+- Long explanatory text on list rows: one line, and the detail goes in the opened item.

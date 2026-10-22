@@ -1,35 +1,30 @@
-/* Process dossier design system: see design-system/transcript-to-bpmn/MASTER.md.
-   Ink-dark paper, warm light text and a reviewer's oxblood. Dark only. Values are contrast-checked there. */
+/* Swiss workbench (design-system/transcript-to-bpmn/MASTER.md): dark, near-black canvas, large
+   clear type (Lexend headings, Source Sans 3 text), a strict grid, one signal red for what needs you,
+   the current step and the main action. No ornament. Contrast is checked in MASTER.md. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/eb-garamond/wght.css";
-@import "@fontsource-variable/eb-garamond/wght-italic.css";
-@import "@fontsource/lato/400.css";
-@import "@fontsource/lato/400-italic.css";
-@import "@fontsource/lato/700.css";
+@import "@fontsource-variable/lexend/wght.css";
+@import "@fontsource-variable/source-sans-3/wght.css";
 
 @theme inline {
-  --font-sans: "Lato", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "EB Garamond Variable", "EB Garamond", Georgia, serif;
-  --font-serif: "EB Garamond Variable", "EB Garamond", Georgia, serif;
+  --font-sans: "Source Sans 3 Variable", "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Lexend Variable", "Lexend", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* dossier palette as Tailwind colours: bg-paper, text-graphite, border-hairline, … */
-  --color-paper: var(--paper);
-  --color-sheet: var(--sheet);
-  --color-paper-shade: var(--paper-shade);
-  --color-ink: var(--ink);
-  --color-graphite: var(--graphite);
-  --color-oxblood: var(--oxblood);
-  --color-oxblood-tint: var(--oxblood-tint);
-  --color-oxblood-deep: var(--oxblood-deep);
-  --color-oxblood-deep-hover: var(--oxblood-deep-hover);
-  --color-hairline: var(--hairline);
-  --color-rule: var(--rule);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-signal: var(--signal);
+  --color-signal-hover: var(--signal-hover);
+  --color-signal-tint: var(--signal-tint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-control: var(--control);
 
-  /* shadcn semantic tokens mapped onto the dossier palette */
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -49,15 +44,15 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
 
+  /* Swiss: near-square corners */
   --radius-sm: 2px;
   --radius-md: 3px;
-  --radius-lg: var(--radius);
-  --radius-xl: 6px;
-  --radius-2xl: 8px;
-  --radius-3xl: 8px;
-  --radius-4xl: 8px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 6px;
+  --radius-3xl: 6px;
+  --radius-4xl: 6px;
 
-  /* minimal motion tokens: enter 150ms, exit 100ms */
   --ease-enter: cubic-bezier(0.2, 0, 0, 1);
   --duration-enter: 150ms;
   --duration-exit: 100ms;
@@ -66,38 +61,38 @@
 :root {
   color-scheme: dark;
 
-  /* contrast on paper: ink 14.9, graphite 7.2, oxblood 5.6, control 4.0; ink on oxblood-deep 6.7 */
-  --paper: #151311;
-  --sheet: #1d1a17;
-  --paper-shade: #26221e;
-  --ink: #ece6da;
-  --graphite: #a8a196;
-  --oxblood: #d4716a; /* text, rules and marks: lifted so it reads on dark */
-  --oxblood-deep: #8b2e2a; /* the brand oxblood, as a filled button behind light text */
-  --oxblood-deep-hover: #9e3732;
-  --oxblood-tint: #33201d;
-  --hairline: #2c2824;
-  --rule: #3b3631;
-  --control: #7a7368;
+  /* contrast on bg: fg 17.4, fg-muted 9.1, fg-subtle 6.3, control 4.2 (≥3), signal 6.2; bg on signal 6.2 */
+  --bg: #0f0f0f;
+  --surface: #171717;
+  --raised: #202020;
+  --fg: #f4f4f2;
+  --fg-muted: #b3b3af;
+  --fg-subtle: #94948f;
+  --signal: #ff5a45; /* the one accent: needs you, current step, main action */
+  --signal-hover: #ff7766;
+  --signal-tint: #2e1714;
+  --line: #2b2b2a;
+  --line-strong: #3d3d3b;
+  --control: #77776f;
 
-  --background: var(--paper);
-  --foreground: var(--ink);
-  --card: var(--sheet);
-  --card-foreground: var(--ink);
-  --popover: var(--sheet);
-  --popover-foreground: var(--ink);
-  --primary: var(--ink); /* the primary action is light-on-dark, not coloured (14.9:1) */
-  --primary-foreground: var(--paper);
-  --secondary: var(--paper-shade);
-  --secondary-foreground: var(--ink);
-  --muted: var(--paper-shade);
-  --muted-foreground: var(--graphite);
-  --accent: var(--paper-shade); /* shadcn "accent" = hover/selected surface, not the brand accent */
-  --accent-foreground: var(--ink);
-  --destructive: var(--oxblood);
-  --border: var(--hairline);
+  --background: var(--bg);
+  --foreground: var(--fg);
+  --card: var(--surface);
+  --card-foreground: var(--fg);
+  --popover: var(--raised);
+  --popover-foreground: var(--fg);
+  --primary: var(--signal);
+  --primary-foreground: var(--bg);
+  --secondary: var(--raised);
+  --secondary-foreground: var(--fg);
+  --muted: var(--raised);
+  --muted-foreground: var(--fg-muted);
+  --accent: var(--raised); /* shadcn "accent" = hover/selected surface */
+  --accent-foreground: var(--fg);
+  --destructive: var(--signal);
+  --border: var(--line);
   --input: var(--control);
-  --ring: var(--ink);
+  --ring: var(--signal);
   --radius: 4px;
 }
 
@@ -107,37 +102,35 @@
   }
   html {
     @apply font-sans;
-    font-size: 15px;
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
   }
   body {
     @apply bg-background text-foreground;
-    line-height: 1.5;
-    font-feature-settings: "kern", "liga";
+    font-size: 1rem; /* 16px text: the accessibility baseline */
+    line-height: 1.55;
   }
   h1,
   h2,
   h3 {
     font-family: var(--font-heading);
-    font-weight: 560;
-    letter-spacing: -0.005em;
-    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
   }
   ::selection {
-    background: var(--rule);
-    color: var(--ink);
+    background: var(--signal-tint);
+    color: var(--fg);
   }
   button:not(:disabled),
-  [role="button"]:not(:disabled) {
+  [role="button"]:not(:disabled),
+  summary {
     cursor: pointer;
   }
-  /* One visible focus style everywhere: 2px light ring, 2px offset (MASTER: accessibility). */
+  /* One visible focus style everywhere: 2px signal ring, 2px offset. */
   :focus-visible {
-    outline: 2px solid var(--ink);
+    outline: 2px solid var(--signal);
     outline-offset: 2px;
   }
-  /* Minimal motion: colour/opacity only; nothing when the user asks for less. */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -150,29 +143,20 @@
 }
 
 @layer utilities {
-  /* Dossier details (MASTER: typography) */
-  .smallcaps {
-    font-variant-caps: all-small-caps;
-    letter-spacing: 0.06em;
-  }
+  /* Swiss label: small uppercase, tracked, muted. */
   .label {
-    font-variant-caps: all-small-caps;
-    letter-spacing: 0.07em;
-    color: var(--graphite);
-    font-weight: 700;
-    font-size: 0.95rem;
+    font-family: var(--font-heading);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
   }
   .tabular {
     font-variant-numeric: tabular-nums;
   }
-  .serif {
-    font-family: var(--font-serif);
-  }
   .measure {
     max-width: 68ch;
-  }
-  .rule-under {
-    border-bottom: 1px solid var(--rule);
   }
   .transition-quiet {
     transition-property: color, background-color, border-color, opacity;

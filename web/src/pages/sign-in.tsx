@@ -8,27 +8,25 @@ import { auth, setApiKey, verifyKey } from "@/lib/api"
 
 function Title() {
   return (
-    <>
-      <p className="label mb-6">A process mapping workspace</p>
-      <h1 className="text-[3.5rem] leading-[1.02] tracking-[-0.015em]">
-        Transcript <span className="text-graphite italic">to</span> BPMN
+    <div className="mb-12">
+      <h1 className="text-[2.5rem] leading-[1.05] sm:text-[3.25rem]">
+        Transcript <span className="text-fg-muted">to</span> BPMN
       </h1>
-      <p className="serif measure mt-4 text-xl leading-snug text-graphite italic">
-        Meetings, set down as process maps: every step traced to the words that described it.
+      <p className="measure mt-4 text-xl leading-snug text-fg-muted">
+        Turn process interviews into BPMN maps. Every step links back to the words that described it.
       </p>
-      <hr className="my-10 border-rule" />
-    </>
+    </div>
   )
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="flex min-h-svh flex-col bg-paper">
+    <main className="flex min-h-svh flex-col bg-bg">
       <div className="mx-auto flex w-full max-w-[560px] flex-1 flex-col justify-center px-6 py-16">
         <Title />
         {children}
       </div>
-      <footer className="smallcaps border-t border-hairline px-6 py-4 text-center text-xs text-graphite">
+      <footer className="border-t border-line px-6 py-4 text-center text-xs text-fg-muted">
         BPMN 2.0 · exports for Camunda and Signavio
       </footer>
     </main>
@@ -92,7 +90,7 @@ export function SignIn() {
   }
 
   const errorLine = error && (
-    <p id="sign-in-error" role="alert" className="text-sm text-oxblood">
+    <p id="sign-in-error" role="alert" className="text-sm text-signal">
       {error}
     </p>
   )
@@ -104,7 +102,7 @@ export function SignIn() {
           <Button onClick={() => void tryDemo()} disabled={settingUp}>
             {settingUp ? "Setting up your demo…" : "Try the demo"}
           </Button>
-          <p className="mt-2 text-sm text-graphite">
+          <p className="mt-2 text-sm text-fg-muted">
             Your own copy of two sample processes, with no sign-up. AI is switched off; it's deleted after{" "}
             {demo.data.sandbox_hours} hours.
           </p>
@@ -114,11 +112,11 @@ export function SignIn() {
       {sentTo ? (
         <div role="status" className="space-y-2">
           <p className="text-xl">Check your email</p>
-          <p className="text-graphite">
-            We sent a sign-in link to <span className="text-ink">{sentTo}</span>. It works once and expires in 15
+          <p className="text-fg-muted">
+            We sent a sign-in link to <span className="text-fg">{sentTo}</span>. It works once and expires in 15
             minutes.
           </p>
-          <button type="button" className="text-sm text-graphite underline" onClick={() => setSentTo(null)}>
+          <button type="button" className="text-sm text-fg-muted underline" onClick={() => setSentTo(null)}>
             Use a different address
           </button>
         </div>
@@ -139,7 +137,7 @@ export function SignIn() {
             autoFocus
           />
           {errorLine || (
-            <p id="email-help" className="text-sm text-graphite">
+            <p id="email-help" className="text-sm text-fg-muted">
               We'll email you a sign-in link. New here? The link creates your workspace.
             </p>
           )}
@@ -151,7 +149,7 @@ export function SignIn() {
             >
               {busy ? "Sending…" : "Email me a sign-in link"}
             </Button>
-            <button type="button" className="text-sm text-graphite underline" onClick={() => setMode("key")}>
+            <button type="button" className="text-sm text-fg-muted underline" onClick={() => setMode("key")}>
               Use an API key instead
             </button>
           </div>
@@ -175,7 +173,7 @@ export function SignIn() {
             autoFocus
           />
           {errorLine || (
-            <p id="api-key-help" className="text-sm text-graphite">
+            <p id="api-key-help" className="text-sm text-fg-muted">
               For integrations and admins. Kept only in this browser.
             </p>
           )}
@@ -183,7 +181,7 @@ export function SignIn() {
             <Button type="submit" disabled={busy || !key.trim()}>
               {busy ? "Checking key…" : "Open the workspace"}
             </Button>
-            <button type="button" className="text-sm text-graphite underline" onClick={() => setMode("email")}>
+            <button type="button" className="text-sm text-fg-muted underline" onClick={() => setMode("email")}>
               Sign in with email instead
             </button>
           </div>
@@ -215,7 +213,7 @@ export function AuthCallback() {
     <Shell>
       {error ? (
         <div className="space-y-3">
-          <p role="alert" className="text-oxblood">
+          <p role="alert" className="text-signal">
             {error}
           </p>
           <Button variant="outline" onClick={() => navigate("/", { replace: true })}>
@@ -223,7 +221,7 @@ export function AuthCallback() {
           </Button>
         </div>
       ) : (
-        <p className="text-graphite">Signing you in…</p>
+        <p className="text-fg-muted">Signing you in…</p>
       )}
     </Shell>
   )

@@ -33,6 +33,7 @@ export interface Project {
   revised_at: string | null
   open_conflicts: number
   open_policy_differences: number
+  open_gaps: number
   transcripts: Transcript[]
 }
 

@@ -26,7 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, downloadText, isStale } from "@/lib/api"
-import { formatDate, formatTimestamp, roman } from "@/lib/format"
+import { formatDate, formatTimestamp } from "@/lib/format"
 import type { ProcessMap, ProcessNode, Resolution } from "@/lib/types"
 import { ExportMenu } from "@/pages/project"
 
@@ -59,14 +59,10 @@ function SelectedStep({
   points: Map<string, number[]>
 }) {
   if (!xmlId)
-    return (
-      <p className="serif py-2 text-[1.05rem] text-graphite italic">
-        Select a step on the map to read where it came from.
-      </p>
-    )
+    return <p className="py-2 text-[1.05rem] text-fg-muted">Select a step on the map to read where it came from.</p>
   const nodeId = modelNodeId(map, xmlId)
   const node = map.model.nodes.find((n) => n.id === nodeId)
-  if (!node) return <p className="py-2 text-sm text-graphite">Not saved yet. Save to keep this element.</p>
+  if (!node) return <p className="py-2 text-sm text-fg-muted">Not saved yet. Save to keep this element.</p>
   const lane = map.model.lanes.find((l) => l.id === node.lane_id)
   const segments = new Map(map.segments.map((s) => [s.segment_id, s]))
   const meetings = [...new Set(node.source_segment_ids.map(meetingOf).filter(Boolean))]
@@ -76,7 +72,7 @@ function SelectedStep({
       <div>
         <p className="label">{NODE_TYPE_LABEL[node.type]}</p>
         <h3 className="mt-1 text-2xl leading-tight">{node.name || "(unnamed)"}</h3>
-        <p className="mt-1 text-sm text-graphite">
+        <p className="mt-1 text-sm text-fg-muted">
           {lane?.name ?? node.lane_id}
           {node.user_added
             ? " · added by hand"
@@ -86,15 +82,15 @@ function SelectedStep({
           {meetings.length > 1 ? ` · described in ${meetings.length} meetings` : ""}
         </p>
         {disputed && (
-          <p className="mt-2 text-sm text-oxblood">
-            In dispute: see point{disputed.length > 1 ? "s" : ""} {disputed.map((n) => `${roman(n)}.`).join(", ")}
+          <p className="mt-2 text-sm text-signal">
+            In dispute: see point{disputed.length > 1 ? "s" : ""} {disputed.map((n) => `${n}`).join(", ")}
           </p>
         )}
       </div>
       <div>
-        <p className="label mb-2 border-b border-hairline pb-1">Sources</p>
+        <p className="label mb-2 border-b border-line pb-1">Sources</p>
         {node.source_segment_ids.length === 0 ? (
-          <p className="text-sm text-graphite">No transcript source: this step was added by hand.</p>
+          <p className="text-sm text-fg-muted">No transcript source: this step was added by hand.</p>
         ) : (
           <ol className="space-y-4" aria-label="Where this step came from">
             {node.source_segment_ids.map((id, i) => {
@@ -109,7 +105,7 @@ function SelectedStep({
                       text={s.text}
                     />
                   ) : (
-                    <p className="text-sm text-graphite">
+                    <p className="text-sm text-fg-muted">
                       {i + 1}. Source text no longer available (deleted by the retention policy).
                     </p>
                   )}
@@ -150,30 +146,28 @@ function HistorySheet({ mapId, version }: { mapId: string; version: number }) {
         </TooltipTrigger>
         <TooltipContent>Version history</TooltipContent>
       </Tooltip>
-      <SheetContent className="bg-paper">
+      <SheetContent className="bg-bg">
         <SheetHeader>
-          <SheetTitle className="serif text-2xl font-[560]">Revisions</SheetTitle>
-          <SheetDescription className="text-graphite">
+          <SheetTitle className="text-2xl font-semibold">Revisions</SheetTitle>
+          <SheetDescription className="text-fg-muted">
             Every change is kept. Undo steps back one at a time.
           </SheetDescription>
         </SheetHeader>
         <ScrollArea className="h-[calc(100svh-8rem)] px-4">
           {isPending ? (
-            <Skeleton className="h-40 bg-paper-shade" />
+            <Skeleton className="h-40 bg-raised" />
           ) : (
             <ol className="pb-6">
               {[...(data ?? [])].reverse().map((v) => (
-                <li key={v.version} className="grid grid-cols-[3rem_1fr] gap-x-3 border-b border-hairline py-3">
-                  <span className="serif tabular text-lg">v{v.version}</span>
+                <li key={v.version} className="grid grid-cols-[3rem_1fr] gap-x-3 border-b border-line py-3">
+                  <span className="tabular text-lg">v{v.version}</span>
                   <div>
                     <p className="text-sm font-bold">
                       {SOURCE_LABEL[v.source] ?? v.source}
-                      {v.version === version && (
-                        <span className="smallcaps ml-2 font-normal text-graphite">current</span>
-                      )}
+                      {v.version === version && <span className="ml-2 font-normal text-fg-muted">current</span>}
                     </p>
-                    {v.instruction && <p className="serif mt-0.5 text-[1.02rem] italic">“{v.instruction}”</p>}
-                    <p className="tabular mt-0.5 text-xs text-graphite">{formatDate(v.created_at)}</p>
+                    {v.instruction && <p className="mt-0.5 text-[1.02rem]">“{v.instruction}”</p>}
+                    <p className="tabular mt-0.5 text-xs text-fg-muted">{formatDate(v.created_at)}</p>
                   </div>
                 </li>
               ))}
@@ -315,7 +309,7 @@ export function MapEditor() {
     return { disputes: byNode, pointOf: byQuestion }
   }, [map, conflictsById])
   const canvasDisputes: Dispute[] = useMemo(
-    () => [...disputes].map(([nodeId, nums]) => ({ nodeId, label: nums.map(roman).join(" ") })),
+    () => [...disputes].map(([nodeId, nums]) => ({ nodeId, label: nums.map(String).join(" ") })),
     [disputes],
   )
   const focusNode = (nodeId: string) => {
@@ -333,12 +327,12 @@ export function MapEditor() {
     }
   }
 
-  if (query.isPending) return <Skeleton className="m-6 h-[70svh] rounded-sm bg-paper-shade" />
+  if (query.isPending) return <Skeleton className="m-6 h-[70svh] rounded-sm bg-raised" />
   if (query.error || !map) {
     return (
       <div className="measure mx-auto p-10">
-        <p className="serif text-2xl">This map couldn't be opened.</p>
-        <p className="mt-1 text-graphite">{query.error?.message}</p>
+        <p className="text-2xl">This map couldn't be opened.</p>
+        <p className="mt-1 text-fg-muted">{query.error?.message}</p>
         <Link to="/projects" className="mt-3 inline-block underline">
           Back to the index
         </Link>
@@ -348,18 +342,18 @@ export function MapEditor() {
 
   const questions = map.model.open_questions
   return (
-    <div className="flex h-[calc(100svh-3.5rem)] flex-col bg-paper">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule px-6 py-2.5">
+    <div className="flex h-[calc(100svh-3.5rem)] flex-col bg-bg">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-strong px-6 py-2.5">
         <div className="min-w-0">
-          <Link to={`/projects/${map.project_id}`} className="label inline-flex min-h-7 items-center hover:text-ink">
-            ← {map.transcript_id == null ? "Process file" : "Meeting map"}
+          <Link to={`/projects/${map.project_id}`} className="label inline-flex min-h-7 items-center hover:text-fg">
+            ← {map.transcript_id == null ? "Process" : "Meeting map"}
           </Link>
           <h1 className="truncate text-[1.6rem] leading-tight">{map.model.name}</h1>
         </div>
-        <p className="tabular self-end pb-1 text-sm text-graphite" role="status">
+        <p className="tabular self-end pb-1 text-sm text-fg-muted" role="status">
           v{map.version}
           {map.transcript_id == null ? " · all meetings" : " · this meeting only"}
-          {dirty && <span className="text-ink"> · unsaved changes</span>}
+          {dirty && <span className="text-fg"> · unsaved changes</span>}
         </p>
         <div className="ml-auto flex items-center gap-1.5">
           <Tooltip>
@@ -389,7 +383,7 @@ export function MapEditor() {
       {newerElsewhere && dirty && !stale && (
         <div
           role="status"
-          className="flex flex-wrap items-center gap-3 border-b border-oxblood/30 bg-oxblood-tint px-6 py-2.5 text-sm"
+          className="flex flex-wrap items-center gap-3 border-b border-signal/30 bg-signal-tint px-6 py-2.5 text-sm"
         >
           <span>
             Someone else saved <strong>v{newerElsewhere.version}</strong> while you were editing v{map.version}. Saving
@@ -405,7 +399,7 @@ export function MapEditor() {
       )}
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(320px,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-1">
-        <div className="relative min-h-0 border-b border-rule lg:border-r lg:border-b-0">
+        <div className="relative min-h-0 border-b border-line-strong lg:border-r lg:border-b-0">
           <BpmnCanvas
             ref={canvas}
             xml={map.bpmn_xml}
@@ -419,15 +413,15 @@ export function MapEditor() {
           />
         </div>
 
-        <aside className="flex min-h-0 flex-col bg-paper" aria-label="Map details">
+        <aside className="flex min-h-0 flex-col bg-bg" aria-label="Map details">
           {map.diarization_available === false && (
-            <p className="border-b border-hairline px-6 py-3 text-sm">
+            <p className="border-b border-line px-6 py-3 text-sm">
               <span className="label mr-1">Note</span> Speakers weren't identified in a recording. Check who does each
               step.
             </p>
           )}
           <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
-            <TabsList className="mx-6 mt-3 h-auto justify-start gap-5 rounded-none border-b border-hairline bg-transparent p-0">
+            <TabsList className="mx-6 mt-3 h-auto justify-start gap-5 rounded-none border-b border-line bg-transparent p-0">
               {[
                 ["step", "Step", 0],
                 ["questions", "Questions", questions.length],
@@ -437,7 +431,7 @@ export function MapEditor() {
                 <TabsTrigger
                   key={value}
                   value={String(value)}
-                  className="smallcaps -mb-px h-9 flex-none rounded-none border-0 border-b-2 border-transparent px-0 font-bold text-graphite data-[state=active]:border-ink data-[state=active]:bg-transparent data-[state=active]:text-ink"
+                  className="-mb-px h-9 flex-none rounded-none border-0 border-b-2 border-transparent px-0 font-semibold text-fg-muted data-[state=active]:border-signal data-[state=active]:bg-transparent data-[state=active]:text-fg"
                 >
                   {label}
                   {Number(count) > 0 && ` (${count})`}
@@ -450,10 +444,8 @@ export function MapEditor() {
                   <SelectedStep map={map} xmlId={selected} points={disputes} />
                 </TabsContent>
                 <TabsContent value="questions">
-                  {questions.length === 0 && (
-                    <p className="serif text-[1.05rem] text-graphite italic">No open questions.</p>
-                  )}
-                  <div className="divide-y divide-hairline">
+                  {questions.length === 0 && <p className="text-[1.05rem] text-fg-muted">No open questions.</p>}
+                  <div className="divide-y divide-line">
                     {questions.map((q) => {
                       const conflict = q.id.startsWith("conflict_") ? conflictsById.get(q.id.slice(9)) : undefined
                       return conflict ? (
@@ -477,7 +469,7 @@ export function MapEditor() {
                           type="button"
                           disabled={!q.related_node_ids.length}
                           onClick={() => q.related_node_ids[0] && focusNode(q.related_node_ids[0])}
-                          className="serif block w-full py-4 text-left text-[1.05rem] leading-snug enabled:hover:underline enabled:hover:decoration-1 enabled:hover:underline-offset-4 disabled:cursor-default"
+                          className="block w-full py-4 text-left text-[1.05rem] leading-snug enabled:hover:underline enabled:hover:decoration-1 enabled:hover:underline-offset-4 disabled:cursor-default"
                         >
                           {q.question}
                         </button>
@@ -490,18 +482,18 @@ export function MapEditor() {
                 </TabsContent>
                 <TabsContent value="issues">
                   {map.errors.length === 0 && (
-                    <p className="serif text-[1.05rem] text-graphite italic">No structural problems found.</p>
+                    <p className="text-[1.05rem] text-fg-muted">No structural problems found.</p>
                   )}
-                  <ol className="divide-y divide-hairline">
+                  <ol className="divide-y divide-line">
                     {map.errors.map((e, i) => (
                       <li key={i}>
                         <button
                           type="button"
                           disabled={!e.node_ids.length}
                           onClick={() => e.node_ids[0] && focusNode(e.node_ids[0])}
-                          className="grid w-full grid-cols-[1.5rem_1fr] py-3 text-left text-sm enabled:hover:bg-paper-shade disabled:cursor-default"
+                          className="grid w-full grid-cols-[1.5rem_1fr] py-3 text-left text-sm enabled:hover:bg-raised disabled:cursor-default"
                         >
-                          <span className="tabular text-graphite">{i + 1}.</span>
+                          <span className="tabular text-fg-muted">{i + 1}.</span>
                           {e.message}
                         </button>
                       </li>
@@ -513,7 +505,7 @@ export function MapEditor() {
           </Tabs>
 
           <form
-            className="space-y-2 border-t border-rule bg-sheet px-6 py-4"
+            className="space-y-2 border-t border-line-strong bg-surface px-6 py-4"
             onSubmit={(e) => {
               e.preventDefault()
               if (instruction.trim() && !send.isPending) send.mutate(instruction.trim())
@@ -525,7 +517,7 @@ export function MapEditor() {
                   <li
                     key={i}
                     className={
-                      c.role === "user" ? "text-graphite" : c.role === "error" ? "text-oxblood" : "serif text-[1.02rem]"
+                      c.role === "user" ? "text-fg-muted" : c.role === "error" ? "text-signal" : "text-[1.02rem]"
                     }
                   >
                     {c.role === "user" ? `You: ${c.text}` : c.text}
@@ -560,10 +552,10 @@ export function MapEditor() {
       </div>
 
       <AlertDialog open={!!stale}>
-        <AlertDialogContent className="bg-sheet">
+        <AlertDialogContent className="bg-surface">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl">Someone else changed this map</AlertDialogTitle>
-            <AlertDialogDescription className="text-graphite">
+            <AlertDialogDescription className="text-fg-muted">
               {stale} Nothing was overwritten. Reload to continue from the latest version
               {dirty ? "; download your unsaved changes first if you want to keep them" : ""}.
             </AlertDialogDescription>
@@ -580,10 +572,10 @@ export function MapEditor() {
       </AlertDialog>
 
       <AlertDialog open={blocker.state === "blocked"}>
-        <AlertDialogContent className="bg-sheet">
+        <AlertDialogContent className="bg-surface">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl">Leave without saving?</AlertDialogTitle>
-            <AlertDialogDescription className="text-graphite">
+            <AlertDialogDescription className="text-fg-muted">
               Your changes to the diagram haven't been saved.
             </AlertDialogDescription>
           </AlertDialogHeader>

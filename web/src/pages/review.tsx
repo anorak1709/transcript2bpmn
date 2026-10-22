@@ -16,8 +16,8 @@ function Step({ step, number }: { step: ReviewStep; number: number }) {
       `${n.condition ? `if ${n.condition}: ` : ""}${n.name}${n.lane && n.lane !== step.lane ? ` (${n.lane})` : ""}`,
   )
   return (
-    <li className="grid grid-cols-[2rem_1fr] gap-x-2 border-b border-hairline py-4">
-      <span className="serif tabular pt-0.5 text-lg leading-none text-graphite" aria-hidden>
+    <li className="grid grid-cols-[2rem_1fr] gap-x-2 border-b border-line py-4">
+      <span className="tabular pt-0.5 text-lg leading-none text-fg-muted" aria-hidden>
         {number}.
       </span>
       <div className="min-w-0 space-y-1.5">
@@ -26,14 +26,14 @@ function Step({ step, number }: { step: ReviewStep; number: number }) {
         </p>
         <h3 className="text-[1.3rem]">{step.name}</h3>
         <dl className="grid grid-cols-[6.5rem_1fr] gap-x-2 gap-y-0.5 text-sm">
-          <dt className="text-graphite">Comes after</dt>
+          <dt className="text-fg-muted">Comes after</dt>
           <dd>{from.length ? from.join("; ") : "The start of the process"}</dd>
-          <dt className="text-graphite">Then</dt>
+          <dt className="text-fg-muted">Then</dt>
           <dd>{to.length ? to.join("; ") : "The process ends"}</dd>
         </dl>
         {step.quotes.length > 0 && (
           <details className="text-sm">
-            <summary className="cursor-pointer text-graphite select-none hover:text-ink">Where this came from</summary>
+            <summary className="cursor-pointer text-fg-muted select-none hover:text-fg">Where this came from</summary>
             <ol className="mt-2 space-y-3">
               {step.quotes.map((q, i) => (
                 <li key={i}>
@@ -68,11 +68,11 @@ export function ReviewPage() {
   })
 
   const shell = (children: React.ReactNode) => (
-    <div className="min-h-svh bg-paper">
-      <header className="border-b border-rule">
+    <div className="min-h-svh bg-bg">
+      <header className="border-b border-line">
         <div className="mx-auto flex h-14 max-w-[820px] items-center px-4 sm:px-6">
-          <span className="serif text-[1.15rem] leading-none font-[560]">
-            Transcript <span className="text-graphite italic">to</span> BPMN
+          <span className="font-heading text-[1.15rem] leading-none font-semibold">
+            Transcript <span className="text-fg-muted">to</span> BPMN
           </span>
           <span className="label ml-auto">Review</span>
         </div>
@@ -83,13 +83,13 @@ export function ReviewPage() {
     </div>
   )
 
-  if (data.isPending) return shell(<p className="text-graphite">Loading your part of the process…</p>)
+  if (data.isPending) return shell(<p className="text-fg-muted">Loading your part of the process…</p>)
   if (data.error) {
     const gone = data.error instanceof ApiError && data.error.status === 410
     return shell(
       <>
         <PageHeader eyebrow="Review" title={gone ? "This link has ended" : "Link not found"} />
-        <p className="measure text-graphite">
+        <p className="measure text-fg-muted">
           {data.error.message}. Ask the person who sent it for a new link.
           {gone ? "" : " Check that the whole link was copied."}
         </p>
@@ -105,11 +105,11 @@ export function ReviewPage() {
         title={r.process}
         revision={`Your part: ${r.lanes.join(", ")} · map v${r.version} · link open until ${formatDay(r.expires_at)}`}
       />
-      <p className="measure serif mb-10 text-[1.1rem] leading-relaxed">
+      <p className="measure mb-10 text-[1.1rem] leading-relaxed">
         This is how your part of the process was described in meetings. Please check each step: is it right, is it
         complete, is the order correct? Then approve it or say what needs to change.
         {changed && (
-          <span className="mt-2 block text-[0.95rem] text-graphite not-italic">
+          <span className="mt-2 block text-[0.95rem] text-fg-muted">
             The map has been updated since this link was sent (v{r.requested_version} → v{r.version}); you're seeing the
             latest version.
           </span>
@@ -124,13 +124,13 @@ export function ReviewPage() {
             ))}
           </ol>
         ) : (
-          <p className="text-graphite">No steps are in your part of the map any more.</p>
+          <p className="text-fg-muted">No steps are in your part of the map any more.</p>
         )}
       </Section>
 
       <Section title="Your answer" className="mt-12">
         {r.decision && (
-          <p className="mb-4 border-l-2 border-ink bg-sheet py-2 pl-3 text-sm" role="status">
+          <p className="mb-4 border-l-2 border-fg bg-surface py-2 pl-3 text-sm" role="status">
             You {r.decision === "approved" ? "approved" : "asked for changes to"} v{r.decided_version}
             {r.decided_at ? ` on ${formatDay(r.decided_at)}` : ""}.{r.comment ? ` “${r.comment}”` : ""} You can change
             your answer below.
@@ -148,7 +148,7 @@ export function ReviewPage() {
           onChange={(e) => setComment(e.target.value)}
         />
         {decide.error && (
-          <p role="alert" className="mt-2 text-sm text-oxblood">
+          <p role="alert" className="mt-2 text-sm text-signal">
             {decide.error.message}
           </p>
         )}
