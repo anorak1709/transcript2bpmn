@@ -20,6 +20,7 @@ def _client() -> "S3Client":
         endpoint_url=s.s3_endpoint_url,
         aws_access_key_id=s.s3_access_key,
         aws_secret_access_key=s.s3_secret_key,
+        region_name=s.s3_region,
     )
     try:
         client.head_bucket(Bucket=s.s3_bucket)

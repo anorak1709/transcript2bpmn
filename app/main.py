@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,12 +26,29 @@ CSP = (
 )
 
 
+async def _hourly() -> None:
+    """The worker's purges, for hosts with no worker. ponytail: one web instance assumed; with
+    several, each runs them (harmless: both purges are idempotent)."""
+    from app.workers.jobs import purge_demo_sandboxes, retention
+
+    while True:
+        for job in (purge_demo_sandboxes, retention):
+            try:
+                await job({})
+            except Exception:
+                logging.getLogger(__name__).exception("in-process %s failed", job.__name__)
+        await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
     app.state.arq = pool
     app.state.redis = pool  # ArqRedis is a redis client too: rate-limit counters
+    crons = asyncio.create_task(_hourly()) if get_settings().in_process_crons else None
     yield
+    if crons:
+        crons.cancel()
     app.state.redis = None  # limiter treats a missing client as 'limits off'
     await pool.aclose()
 

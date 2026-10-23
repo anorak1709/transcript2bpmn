@@ -40,14 +40,17 @@ def rate_limit(bucket: str) -> Callable[[Request, CurrentPrincipal], Awaitable[N
     return check
 
 
-def ip_limit(bucket: str, per_minute: int) -> Callable[[Request], Awaitable[None]]:
-    """Per client IP, for public endpoints that have no API key to count against (sign-up, demo)."""
+def ip_limit(bucket: str, per_minute: int, per_ip: bool = True) -> Callable[[Request], Awaitable[None]]:
+    """Per client IP, for public endpoints that have no API key to count against (sign-up, demo).
+    per_ip=False counts every caller together: a hard cap that a spoofed IP can't get around."""
 
     async def check(request: Request) -> None:
         redis = getattr(request.app.state, "redis", None)
         if not per_minute or redis is None:
             return
-        ip = request.headers.get("fly-client-ip") or (request.client.host if request.client else "?")
+        header = get_settings().client_ip_header
+        peer = request.client.host if request.client else "?"
+        ip = "all" if not per_ip else (header and request.headers.get(header)) or peer
         key = f"rl:ip:{bucket}:{ip}:{int(time.time() // WINDOW_S)}"
         count = await redis.incr(key)
         if count == 1:

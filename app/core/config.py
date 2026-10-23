@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     s3_access_key: str = "minioadmin"
     s3_secret_key: str = "minioadmin"
     s3_bucket: str = "transcripts"
+    s3_region: str | None = None  # Supabase/B2/R2 need theirs; MinIO and Tigris don't
 
     # LiteLLM provider prefix: "openai", "azure", ... Switching provider is config only.
     llm_provider: str = "openai"
@@ -79,6 +80,11 @@ class Settings(BaseSettings):
 
     # Public URL of the web app, used in magic-link and invite emails.
     public_url: str = "http://localhost:8000"
+    # Header the platform's proxy sets to the real client IP (Fly: fly-client-ip). Empty: the socket
+    # peer, which uvicorn's --proxy-headers takes from X-Forwarded-For (spoofable behind some proxies).
+    client_ip_header: str = "fly-client-ip"
+    # Free hosts without a worker (Render free): run the hourly purges inside the web process.
+    in_process_crons: bool = False
     # Sign-up by email magic link. No RESEND_API_KEY = links are written to the log (dev only).
     resend_api_key: str | None = None
     email_from: str = "Transcript to BPMN <login@example.com>"

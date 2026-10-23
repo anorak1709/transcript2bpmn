@@ -1,0 +1,46 @@
+# Public demo on Render's free plan: AI switched off, one-click sandbox workspaces.
+# Postgres (Neon), Redis (Upstash) and file storage (Supabase) are external free tiers. See docs/deploy-render.md.
+services:
+  - type: web
+    name: transcript2bpmn-demo
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    # No pre-deploy step or worker on the free plan: migrate on start; purges run in-process.
+    dockerCommand: >-
+      sh -c 'alembic upgrade head &&
+      PUBLIC_URL="${PUBLIC_URL:-$RENDER_EXTERNAL_URL}"
+      exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-10000}" --proxy-headers --forwarded-allow-ips="*"'
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DEMO_MODE
+        value: "true" # nothing may call an AI provider
+      - key: DEMO_SANDBOXES
+        value: "true"
+      - key: SANDBOX_HOURS
+        value: "24"
+      - key: IN_PROCESS_CRONS
+        value: "true"
+      - key: CLIENT_IP_HEADER
+        value: "" # Render has no Fly-style header; the global sandbox cap covers spoofed IPs
+      - key: EXPORT_BROWSER_CHANNEL
+        value: "" # Playwright's bundled Chromium (in the image)
+      - key: LOG_LEVEL
+        value: INFO
+      # Filled in on the Render dashboard when the Blueprint is created (never committed):
+      - key: DATABASE_URL # Neon: postgresql://…?sslmode=require
+        sync: false
+      - key: REDIS_URL # Upstash: rediss://default:…@….upstash.io:6379
+        sync: false
+      - key: S3_ENDPOINT_URL # Supabase: https://<project-ref>.supabase.co/storage/v1/s3
+        sync: false
+      - key: S3_REGION # Supabase: the project's region, e.g. ap-southeast-1
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: S3_BUCKET # create it first in Supabase → Storage (private)
+        sync: false

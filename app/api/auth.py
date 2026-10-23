@@ -280,7 +280,11 @@ def demo_status() -> DemoStatus:
     return DemoStatus(sandboxes=s.demo_sandboxes, demo_mode=s.demo_mode, sandbox_hours=s.sandbox_hours)
 
 
-@demo.post("/sandbox", status_code=201, dependencies=[Depends(ip_limit("sandbox", 3))])
+@demo.post(
+    "/sandbox",
+    status_code=201,
+    dependencies=[Depends(ip_limit("sandbox", 3)), Depends(ip_limit("sandbox-all", 20, per_ip=False))],
+)
 def new_sandbox() -> SessionOut:
     """One click, no sign-up: a fresh copy of the sample workspace for this visitor, with AI
     switched off, deleted after SANDBOX_HOURS."""

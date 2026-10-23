@@ -328,3 +328,33 @@ def test_other_org_cannot_touch_this_workspace(tenant: TenantCtx) -> None:
     other = make_tenant()
     assert other.client.get("/corrections").json()["total"] == 0
     assert other.client.get("/members").json() == []
+
+
+def test_global_cap_ignores_spoofed_ips() -> None:
+    """per_ip=False counts every caller together, so rotating X-Forwarded-For can't get around it."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    from app.ratelimit import ip_limit
+
+    class Counter:
+        def __init__(self) -> None:
+            self.n: dict[str, int] = {}
+
+        async def incr(self, key: str) -> int:
+            self.n[key] = self.n.get(key, 0) + 1
+            return self.n[key]
+
+        async def expire(self, key: str, s: int) -> None:
+            pass
+
+    app = SimpleNamespace(state=SimpleNamespace(redis=Counter()))
+    check = ip_limit("t-all", 2, per_ip=False)
+    reqs = [SimpleNamespace(app=app, headers={"fly-client-ip": f"10.0.0.{i}"}, client=None) for i in range(3)]
+    asyncio.run(check(reqs[0]))  # type: ignore[arg-type]
+    asyncio.run(check(reqs[1]))  # type: ignore[arg-type]
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(check(reqs[2]))  # type: ignore[arg-type]
+    assert e.value.status_code == 429
