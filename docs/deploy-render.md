@@ -30,7 +30,7 @@ Limits of the free plan:
 Every push to `master` redeploys. Logs are in the service's **Logs** tab.
 
 ## Notes
-- Migrations run on each start. The hourly cleanup of expired demo workspaces runs inside the web process
+- Migrations run on each start (`scripts/start-render.sh`). The hourly cleanup of expired demo workspaces runs inside the web process
   (`IN_PROCESS_CRONS`), because a worker isn't free on Render.
 - "Try the demo" is limited to 3 a minute per IP and 20 a minute overall. The overall limit still holds if someone
   fakes their IP behind Render's proxy.

@@ -8,10 +8,7 @@ services:
     region: singapore
     dockerfilePath: ./Dockerfile
     # No pre-deploy step or worker on the free plan: migrate on start; purges run in-process.
-    dockerCommand: >-
-      sh -c 'alembic upgrade head &&
-      PUBLIC_URL="${PUBLIC_URL:-$RENDER_EXTERNAL_URL}"
-      exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-10000}" --proxy-headers --forwarded-allow-ips="*"'
+    dockerCommand: sh scripts/start-render.sh
     healthCheckPath: /health
     autoDeploy: true
     envVars:
