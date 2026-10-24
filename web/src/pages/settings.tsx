@@ -163,7 +163,12 @@ export function Settings() {
 
   return (
     <Page>
-      <PageHeader eyebrow="Workspace" title="Settings" revision="API keys, usage and the record of who did what." />
+      <PageHeader
+        eyebrow="/// Workspace"
+        code="SYS / CONFIG"
+        title="Settings"
+        revision="API keys, usage and the record of who did what."
+      />
 
       <div className="grid gap-x-14 gap-y-14 lg:grid-cols-[minmax(0,1fr)_300px]">
         <Section title="API keys" id="keys" aside="Only a hash of each key is stored">

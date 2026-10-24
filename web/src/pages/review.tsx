@@ -16,15 +16,15 @@ function Step({ step, number }: { step: ReviewStep; number: number }) {
       `${n.condition ? `if ${n.condition}: ` : ""}${n.name}${n.lane && n.lane !== step.lane ? ` (${n.lane})` : ""}`,
   )
   return (
-    <li className="grid grid-cols-[2rem_1fr] gap-x-2 border-b border-line py-4">
-      <span className="tabular pt-0.5 text-lg leading-none text-fg-muted" aria-hidden>
-        {number}.
+    <li className="grid grid-cols-[2.5rem_1fr] gap-x-3 border-b-2 border-fg py-5">
+      <span className="macro tabular text-[1.75rem] text-fg-subtle" aria-hidden>
+        {String(number).padStart(2, "0")}
       </span>
       <div className="min-w-0 space-y-1.5">
         <p className="label">
           {step.kind === "decision" ? "Decision" : "Step"} · {step.lane}
         </p>
-        <h3 className="text-[1.3rem]">{step.name}</h3>
+        <h3 className="macro text-[1.4rem]">{step.name}</h3>
         <dl className="grid grid-cols-[6.5rem_1fr] gap-x-2 gap-y-0.5 text-sm">
           <dt className="text-fg-muted">Comes after</dt>
           <dd>{from.length ? from.join("; ") : "The start of the process"}</dd>
@@ -69,12 +69,16 @@ export function ReviewPage() {
 
   const shell = (children: React.ReactNode) => (
     <div className="min-h-svh bg-bg">
-      <header className="border-b border-line">
+      <header className="border-b-2 border-fg">
         <div className="mx-auto flex h-14 max-w-[820px] items-center px-4 sm:px-6">
-          <span className="font-heading text-[1.15rem] leading-none font-semibold">
-            Transcript <span className="text-fg-muted">to</span> BPMN
+          <span className="macro text-[1.15rem] leading-none">
+            Transcript
+            <span className="text-hazard" aria-hidden>
+              →
+            </span>
+            <span className="sr-only"> to </span>BPMN
           </span>
-          <span className="label ml-auto">Review</span>
+          <span className="label ml-auto">[ Sign-off ]</span>
         </div>
       </header>
       <main id="main" className="mx-auto max-w-[820px] px-4 pt-10 pb-20 sm:px-6">

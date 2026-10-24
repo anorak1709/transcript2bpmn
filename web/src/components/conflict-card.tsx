@@ -210,7 +210,7 @@ export function ConflictPoint({
           />
         ) : (
           <div className="flex flex-wrap items-center gap-2 pt-1" role="group" aria-label={`Settle point ${number}`}>
-            <span className="text-xs text-fg-muted">Settle as</span>
+            <span className="label">Settle as &gt;&gt;</span>
             {options.map((opt, i) => (
               <Button
                 key={i}

@@ -1,16 +1,19 @@
-/* Swiss workbench (design-system/transcript-to-bpmn/MASTER.md): dark, near-black canvas, large
-   clear type (Lexend headings, Source Sans 3 text), a strict grid, one signal red for what needs you,
-   the current step and the main action. No ornament. Contrast is checked in MASTER.md. */
+/* Industrial print (design-system/transcript-to-bpmn/MASTER.md): Swiss industrial print, light only.
+   Unbleached paper, carbon ink, one hazard red. Archivo Black for structure, IBM Plex Mono for labels and
+   telemetry, Inter for sentences. Square corners, visible compartment lines, faint grain. Contrast in MASTER.md. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/lexend/wght.css";
-@import "@fontsource-variable/source-sans-3/wght.css";
+@import "@fontsource/archivo-black/400.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource-variable/inter/wght.css";
 
 @theme inline {
-  --font-sans: "Source Sans 3 Variable", "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Lexend Variable", "Lexend", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Archivo Black", "Arial Black", ui-sans-serif, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -21,6 +24,7 @@
   --color-signal: var(--signal);
   --color-signal-hover: var(--signal-hover);
   --color-signal-tint: var(--signal-tint);
+  --color-hazard: var(--hazard);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-control: var(--control);
@@ -44,56 +48,58 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
 
-  /* Swiss: near-square corners */
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-xl: 4px;
-  --radius-2xl: 6px;
-  --radius-3xl: 6px;
-  --radius-4xl: 6px;
+  /* 90-degree corners everywhere */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 
   --ease-enter: cubic-bezier(0.2, 0, 0, 1);
-  --duration-enter: 150ms;
-  --duration-exit: 100ms;
+  --duration-enter: 120ms;
+  --duration-exit: 80ms;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* contrast on bg: fg 17.4, fg-muted 9.1, fg-subtle 6.3, control 4.2 (≥3), signal 6.2; bg on signal 6.2 */
-  --bg: #0f0f0f;
-  --surface: #171717;
-  --raised: #202020;
-  --fg: #f4f4f2;
-  --fg-muted: #b3b3af;
-  --fg-subtle: #94948f;
-  --signal: #ff5a45; /* the one accent: needs you, current step, main action */
-  --signal-hover: #ff7766;
-  --signal-tint: #2e1714;
-  --line: #2b2b2a;
-  --line-strong: #3d3d3b;
-  --control: #77776f;
+  /* contrast on paper: fg 17.1, fg-muted 10.4, fg-subtle 6.1, control 4.2 (UI ≥3), signal 5.5;
+     white on signal 6.1. hazard (#E61919, 4.2) is for fills, stripes and big numerals only, never small text. */
+  --bg: #f4f4f0; /* unbleached paper */
+  --surface: #eae8e3; /* hover rows, current step, quiet panels */
+  --raised: #ffffff; /* fields, menus */
+  --fg: #111111; /* carbon ink */
+  --fg-muted: #3a3a36;
+  --fg-subtle: #5c5c56;
+  --signal: #c41414; /* red that's safe for text and filled buttons */
+  --signal-hover: #a50f0f;
+  --signal-tint: #fbe4e1;
+  --hazard: #e61919; /* aviation red: stripes, numerals, rules */
+  --line: #c9c7c0; /* row dividers (decorative) */
+  --line-strong: #111111; /* structural compartment lines */
+  --control: #76766f;
 
   --background: var(--bg);
   --foreground: var(--fg);
-  --card: var(--surface);
+  --card: var(--raised);
   --card-foreground: var(--fg);
   --popover: var(--raised);
   --popover-foreground: var(--fg);
   --primary: var(--signal);
-  --primary-foreground: var(--bg);
-  --secondary: var(--raised);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface);
   --secondary-foreground: var(--fg);
-  --muted: var(--raised);
+  --muted: var(--surface);
   --muted-foreground: var(--fg-muted);
-  --accent: var(--raised); /* shadcn "accent" = hover/selected surface */
+  --accent: var(--surface); /* shadcn "accent" = hover/selected surface */
   --accent-foreground: var(--fg);
   --destructive: var(--signal);
-  --border: var(--line);
+  --border: var(--line-strong);
   --input: var(--control);
-  --ring: var(--signal);
-  --radius: 4px;
+  --ring: var(--fg);
+  --radius: 0px;
 }
 
 @layer base {
@@ -106,29 +112,40 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-size: 1rem; /* 16px text: the accessibility baseline */
+    font-size: 1rem; /* 16px sentences: the accessibility baseline */
     line-height: 1.55;
+  }
+  /* Mechanical grain: one fixed, faint noise layer over everything; never intercepts input. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    opacity: 0.05;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
   h1,
   h2,
   h3 {
     font-family: var(--font-heading);
-    font-weight: 600;
-    letter-spacing: -0.015em;
-    line-height: 1.15;
+    font-weight: 400; /* Archivo Black has one weight */
+    letter-spacing: -0.02em;
+    line-height: 0.95;
   }
   ::selection {
-    background: var(--signal-tint);
-    color: var(--fg);
+    background: var(--fg);
+    color: var(--bg);
   }
   button:not(:disabled),
   [role="button"]:not(:disabled),
   summary {
     cursor: pointer;
   }
-  /* One visible focus style everywhere: 2px signal ring, 2px offset. */
+  /* One visible focus style: 2px ink outline, 2px offset (red is reserved for "needs you"). */
   :focus-visible {
-    outline: 2px solid var(--signal);
+    outline: 2px solid var(--fg);
     outline-offset: 2px;
   }
   @media (prefers-reduced-motion: reduce) {
@@ -143,14 +160,22 @@
 }
 
 @layer utilities {
-  /* Swiss label: small uppercase, tracked, muted. */
+  /* Telemetry label: mono, uppercase, tracked like a typewriter. */
   .label {
-    font-family: var(--font-heading);
+    font-family: var(--font-mono);
     font-size: 0.75rem;
     font-weight: 500;
+    line-height: 1.3;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--fg-muted);
+  }
+  /* Macro type: uppercase structural blocks. */
+  .macro {
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+    letter-spacing: -0.04em;
+    line-height: 0.9;
   }
   .tabular {
     font-variant-numeric: tabular-nums;
@@ -162,5 +187,45 @@
     transition-property: color, background-color, border-color, opacity;
     transition-duration: var(--duration-enter);
     transition-timing-function: var(--ease-enter);
+  }
+  /* Hazard stripe: marks what needs you (always next to words that say so). */
+  .stripes {
+    background: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, var(--fg) 6px 12px);
+  }
+  /* Barcode rule: a section divider. */
+  .barcode {
+    height: 12px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--fg) 0 2px,
+      transparent 2px 4px,
+      var(--fg) 4px 5px,
+      transparent 5px 8px,
+      var(--fg) 8px 11px,
+      transparent 11px 13px,
+      var(--fg) 13px 14px,
+      transparent 14px 18px
+    );
+  }
+  /* Registration crosshairs on a compartment's top corners. */
+  .xmarks {
+    position: relative;
+  }
+  .xmarks::before,
+  .xmarks::after {
+    content: "+";
+    position: absolute;
+    top: -0.62em;
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--fg);
+    pointer-events: none;
+  }
+  .xmarks::before {
+    left: -0.32em;
+  }
+  .xmarks::after {
+    right: -0.32em;
   }
 }

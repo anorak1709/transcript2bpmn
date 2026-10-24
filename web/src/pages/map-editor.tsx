@@ -343,15 +343,15 @@ export function MapEditor() {
   const questions = map.model.open_questions
   return (
     <div className="flex h-[calc(100svh-3.5rem)] flex-col bg-bg">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-strong px-6 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b-2 border-fg px-6 py-2.5">
         <div className="min-w-0">
           <Link to={`/projects/${map.project_id}`} className="label inline-flex min-h-7 items-center hover:text-fg">
             ← {map.transcript_id == null ? "Process" : "Meeting map"}
           </Link>
-          <h1 className="truncate text-[1.6rem] leading-tight">{map.model.name}</h1>
+          <h1 className="macro truncate text-[1.75rem]">{map.model.name}</h1>
         </div>
-        <p className="tabular self-end pb-1 text-sm text-fg-muted" role="status">
-          v{map.version}
+        <p className="label tabular self-end pb-1" role="status">
+          REV {map.version}
           {map.transcript_id == null ? " · all meetings" : " · this meeting only"}
           {dirty && <span className="text-fg"> · unsaved changes</span>}
         </p>
@@ -399,7 +399,7 @@ export function MapEditor() {
       )}
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(320px,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-1">
-        <div className="relative min-h-0 border-b border-line-strong lg:border-r lg:border-b-0">
+        <div className="relative min-h-0 border-b-2 border-fg lg:border-r-2 lg:border-b-0">
           <BpmnCanvas
             ref={canvas}
             xml={map.bpmn_xml}
@@ -421,7 +421,7 @@ export function MapEditor() {
             </p>
           )}
           <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
-            <TabsList className="mx-6 mt-3 h-auto justify-start gap-5 rounded-none border-b border-line bg-transparent p-0">
+            <TabsList className="mx-6 mt-3 h-auto justify-start gap-5 rounded-none border-b-2 border-fg bg-transparent p-0">
               {[
                 ["step", "Step", 0],
                 ["questions", "Questions", questions.length],
@@ -431,7 +431,7 @@ export function MapEditor() {
                 <TabsTrigger
                   key={value}
                   value={String(value)}
-                  className="-mb-px h-9 flex-none rounded-none border-0 border-b-2 border-transparent px-0 font-semibold text-fg-muted data-[state=active]:border-signal data-[state=active]:bg-transparent data-[state=active]:text-fg"
+                  className="-mb-[2px] h-9 flex-none rounded-none border-0 border-b-4 border-transparent px-0 font-mono text-[0.78rem] font-semibold tracking-[0.08em] text-fg-muted uppercase data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:text-fg"
                 >
                   {label}
                   {Number(count) > 0 && ` (${count})`}
@@ -505,7 +505,7 @@ export function MapEditor() {
           </Tabs>
 
           <form
-            className="space-y-2 border-t border-line-strong bg-surface px-6 py-4"
+            className="space-y-2 border-t-2 border-fg bg-surface px-6 py-4"
             onSubmit={(e) => {
               e.preventDefault()
               if (instruction.trim() && !send.isPending) send.mutate(instruction.trim())

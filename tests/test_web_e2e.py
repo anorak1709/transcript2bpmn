@@ -116,7 +116,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
 
         # Projects list -> project
         expect(page.get_by_role("heading", name="Processes")).to_be_visible()
-        # The design system is what's actually rendered (MASTER.md): Swiss dark, Lexend + Source Sans 3, signal red.
+        # What's rendered matches MASTER.md: industrial print, paper, Archivo Black + Inter, signal red.
         style = page.evaluate(
             """() => {
               const cs = (el) => getComputedStyle(el)
@@ -127,11 +127,11 @@ def test_main_workflow_in_the_browser(server: str) -> None:
                        primary: cs(primary).backgroundColor }
             }"""
         )
-        assert style["bg"] == "rgb(15, 15, 15)" and style["primary"] == "rgb(255, 90, 69)", style
-        assert "Lexend" in style["h1"] and "Source Sans 3" in style["body"], style
-        page.keyboard.press("Tab")  # keyboard focus shows the 2px signal ring
+        assert style["bg"] == "rgb(244, 244, 240)" and style["primary"] == "rgb(196, 20, 20)", style
+        assert "Archivo Black" in style["h1"] and "Inter" in style["body"], style
+        page.keyboard.press("Tab")  # keyboard focus shows the 2px ink ring (red only means "needs you")
         ring = page.evaluate("() => getComputedStyle(document.activeElement).outlineColor")
-        assert ring == "rgb(255, 90, 69)", ring
+        assert ring == "rgb(17, 17, 17)", ring
         page.get_by_role("link", name="Invoices").click()
         expect(page.get_by_role("heading", name="Invoices")).to_be_visible()
 
@@ -151,7 +151,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         steps = page.get_by_role("navigation", name="Steps")
         expect(steps.get_by_text(re.compile(r"need"))).to_be_visible(timeout=10_000)
         steps.get_by_role("button", name=re.compile(r"Review")).click()
-        page.get_by_role("button", name=re.compile(r"^Meetings disagree Who does")).click()  # open one item
+        page.get_by_role("button", name=re.compile(r"^Meetings disagree.*Who does")).click()  # open one item
         expect(page.get_by_role("button", name="Settle as Treasury")).to_be_visible()
         page.screenshot(path=str(SHOTS / "e2e-project.png"))
 
@@ -159,13 +159,13 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         page.get_by_role("link", name="Open the map").click()
         expect(page.locator(".bpmn-canvas svg").first).to_be_visible()
         expect(page.locator('.bpmn-canvas [data-element-id="Node_t_bank"]')).to_be_visible()
-        expect(page.get_by_text(re.compile(r"^v2 ·"))).to_be_visible()
+        expect(page.get_by_text(re.compile(r"^REV 2 ·"))).to_be_visible()
 
         # Apply a conflict option from the Questions tab
         page.get_by_role("tab", name="Questions (3)").click()
         page.get_by_role("button", name="Settle as Treasury").click()
         expect(page.get_by_text("Applied to the map")).to_be_visible()
-        expect(page.get_by_text(re.compile(r"^v3 ·"))).to_be_visible()
+        expect(page.get_by_text(re.compile(r"^REV 3 ·"))).to_be_visible()
 
         # Select a step on the canvas -> its transcript quotes
         page.locator('.bpmn-canvas [data-element-id="Node_t_pay"]').click()
@@ -180,7 +180,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         page.get_by_label("Describe a change").fill("call it release supplier payment")
         page.keyboard.press("Enter")
         expect(page.get_by_text("Renamed the payment step.")).to_be_visible()
-        expect(page.get_by_text(re.compile(r"^v4 ·"))).to_be_visible()
+        expect(page.get_by_text(re.compile(r"^REV 4 ·"))).to_be_visible()
         page.screenshot(path=str(SHOTS / "e2e-editor.png"))
 
         # Concurrent edit: another client changes the map behind this editor's back (v4 -> v3).
@@ -191,7 +191,7 @@ def test_main_workflow_in_the_browser(server: str) -> None:
         expect(page.get_by_text("you have v4, it's now v3")).to_be_visible()
         page.get_by_role("button", name="Reload latest").click()
         expect(page.get_by_role("alertdialog")).to_be_hidden()
-        expect(page.get_by_text(re.compile(r"^v3 ·"))).to_be_visible()
+        expect(page.get_by_text(re.compile(r"^REV 3 ·"))).to_be_visible()
         assert t.http.get(f"/maps/{map_id}").json()["version"] == 3  # the stale undo wrote nothing
         page.screenshot(path=str(SHOTS / "e2e-reloaded.png"))
 

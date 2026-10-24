@@ -48,11 +48,11 @@ export interface BpmnCanvasHandle {
   zoomToFit(): void
 }
 
-// MASTER "themed to match": light ink on a dark sheet, Source Sans labels (hex: bpmn-js needs literals). Rendering only: the saved
+// MASTER "themed to match": carbon ink on white shapes over paper, Inter labels (hex: bpmn-js needs literals). Rendering only: the saved
 // XML and server-side exports keep standard BPMN styling.
-const FONT = '"Source Sans 3 Variable", "Source Sans 3", system-ui, sans-serif'
+const FONT = '"Inter Variable", "Inter", system-ui, sans-serif'
 const THEME = {
-  bpmnRenderer: { defaultFillColor: "#171717", defaultStrokeColor: "#f4f4f2", defaultLabelColor: "#f4f4f2" },
+  bpmnRenderer: { defaultFillColor: "#ffffff", defaultStrokeColor: "#111111", defaultLabelColor: "#111111" },
   textRenderer: {
     defaultStyle: { fontFamily: FONT, fontSize: 14, fontWeight: 500, lineHeight: 1.15 },
     externalStyle: { fontFamily: FONT, fontSize: 13, fontWeight: 500, lineHeight: 1.15 },

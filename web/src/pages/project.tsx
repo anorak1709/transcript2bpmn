@@ -6,7 +6,7 @@ import { toast } from "sonner"
 
 import { Page } from "@/components/app-shell"
 import { ConflictPoint, PolicyDifference } from "@/components/conflict-card"
-import { PageHeader, Section, StatusMark } from "@/components/dossier"
+import { Framed, PageHeader, Section, StatusMark } from "@/components/dossier"
 import { AddFiles, Signoffs, Speakers } from "@/components/process-file"
 import { Improvements, ReviewQueue } from "@/components/review-tools"
 import {
@@ -227,7 +227,10 @@ const KIND_WORD = { disagreement: "Meetings disagree", policy: "Against the poli
 function NextStep({ to, onGo }: { to: Step | null; onGo: (s: Step) => void }) {
   if (!to) return null
   return (
-    <div className="mt-14 flex justify-end border-t border-line pt-6">
+    <div className="mt-16 flex items-center justify-between gap-4 border-t-2 border-fg pt-4">
+      <span className="label text-fg-subtle" aria-hidden>
+        &gt;&gt;&gt;
+      </span>
       <Button variant="outline" onClick={() => onGo(to)}>
         Next: {STEP_LABEL[to]} <ArrowRight aria-hidden />
       </Button>
@@ -373,6 +376,7 @@ export function ProjectPage() {
           </Link>
         }
         title={p.name}
+        code={`UNIT / P-${p.id.slice(0, 4).toUpperCase()}${p.map_version ? ` · REV ${p.map_version}` : ""}`}
         revision={
           <>
             {countOf(meetings.length, "meeting")}
@@ -390,8 +394,8 @@ export function ProjectPage() {
         }
       />
 
-      <nav aria-label="Steps" className="mb-12">
-        <ol className="grid grid-cols-2 gap-px overflow-hidden border border-line bg-line sm:grid-cols-4">
+      <nav aria-label="Steps" className="mb-14">
+        <ol className="grid grid-cols-2 gap-[2px] border-2 border-fg bg-fg sm:grid-cols-4">
           {STEPS.map((s, i) => {
             const st = status[s]
             const current = s === step
@@ -402,27 +406,25 @@ export function ProjectPage() {
                   onClick={() => go(s)}
                   aria-current={current ? "step" : undefined}
                   className={cn(
-                    "transition-quiet flex h-full w-full flex-col items-start gap-1 border-t-4 px-4 py-4 text-left hover:bg-surface",
-                    current ? "border-signal bg-surface" : "border-transparent",
+                    "transition-quiet flex h-full w-full flex-col items-start gap-3 px-4 pt-3 pb-4 text-left hover:bg-surface",
+                    current && "bg-surface shadow-[inset_0_6px_0_var(--fg)]",
                   )}
                 >
-                  <span className="flex items-center gap-2 font-heading text-lg font-semibold">
-                    <span
-                      className={cn(
-                        "tabular inline-flex size-6 items-center justify-center text-sm",
-                        st.done
-                          ? "bg-fg text-bg"
-                          : current
-                            ? "bg-signal text-bg"
-                            : "border border-line-strong text-fg-muted",
-                      )}
-                      aria-hidden
-                    >
-                      {st.done ? <Check className="size-4" strokeWidth={3} /> : i + 1}
-                    </span>
+                  <span
+                    className={cn(
+                      "macro tabular text-[clamp(2.5rem,5vw,4rem)]",
+                      current ? "text-hazard" : st.done ? "text-fg" : "text-fg-subtle",
+                    )}
+                    aria-hidden
+                  >
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className="flex items-center gap-1.5 font-mono text-[0.85rem] font-semibold tracking-[0.08em] uppercase">
+                    {st.done && <Check className="size-4" strokeWidth={3} aria-hidden />}
                     {STEP_LABEL[s]}
                   </span>
-                  <span className={cn("text-sm", st.needs ? "font-semibold text-signal" : "text-fg-muted")}>
+                  <span className={cn("label flex items-center gap-2", st.needs ? "font-semibold text-signal" : "")}>
+                    {st.needs && <span className="stripes inline-block h-3 w-5" aria-hidden />}
                     {st.text}
                   </span>
                 </button>
@@ -491,18 +493,17 @@ export function ProjectPage() {
               <p className="text-lg text-fg-muted">Add a meeting first: there's nothing to review yet.</p>
             ) : (
               <>
-                <h2 className="text-[1.75rem]">
-                  {items.length
-                    ? `${items.length} thing${items.length === 1 ? "" : "s"} need${items.length === 1 ? "s" : ""} you`
-                    : "Nothing needs you"}
+                <h2 className="macro flex flex-wrap items-center gap-x-4 gap-y-2 text-[clamp(2rem,5vw,3.5rem)]">
+                  {items.length > 0 && <span className="stripes inline-block h-[0.7em] w-[1.4em]" aria-hidden />}
+                  {items.length ? `${items.length} need${items.length === 1 ? "s" : ""} you` : "Nothing needs you"}
                 </h2>
-                <p className="mt-2 mb-8 text-fg-muted">
+                <p className="mt-4 mb-8 text-fg-muted">
                   {items.length
                     ? "Open one to see who said what and settle it. Settled items leave the list."
                     : "The meetings agree, match the policy and leave no gaps."}
                 </p>
-                <ul className="border-t border-line">
-                  {items.map((it) => {
+                <ul className="border-t-2 border-fg">
+                  {items.map((it, n) => {
                     const isOpen = open === it.key
                     const title = it.kind === "gap" ? it.gap.description : question(it.conflict.description)
                     const sub =
@@ -514,33 +515,33 @@ export function ProjectPage() {
                             ? "Only in the policy"
                             : "Only in the meetings"
                     return (
-                      <li key={it.key} className="border-b border-line">
+                      <li key={it.key} className={cn("border-b-2 border-fg", isOpen && "bg-raised")}>
                         <button
                           type="button"
                           aria-expanded={isOpen}
                           aria-controls={`item-${it.key}`}
                           onClick={() => setOpen(isOpen ? null : it.key)}
-                          className="transition-quiet flex w-full items-start gap-4 py-5 text-left hover:bg-surface sm:px-2"
+                          className="transition-quiet flex w-full items-stretch gap-4 text-left hover:bg-surface"
                         >
-                          <span className="min-w-0 flex-1">
-                            <span className={cn("label block", it.kind !== "gap" && "text-signal")}>
-                              {KIND_WORD[it.kind]}
+                          <span className="stripes w-2 shrink-0" aria-hidden />
+                          <span className="min-w-0 flex-1 py-5">
+                            <span className="label block text-signal">
+                              <Framed>{KIND_WORD[it.kind]}</Framed>
+                              <span className="text-fg-subtle"> · #{String(n + 1).padStart(2, "0")}</span>
                             </span>
-                            <span className="mt-1 block font-heading text-[1.15rem] leading-snug font-medium">
-                              {title}
-                            </span>
+                            <span className="mt-2 block text-[1.15rem] leading-snug font-semibold">{title}</span>
                             <span className="mt-1 block text-fg-muted">{sub}</span>
                           </span>
                           <ChevronDown
                             className={cn(
-                              "mt-6 size-5 shrink-0 text-fg-muted transition-transform",
+                              "mt-7 mr-3 size-5 shrink-0 text-fg transition-transform",
                               isOpen && "rotate-180",
                             )}
                             aria-hidden
                           />
                         </button>
                         {isOpen && (
-                          <div id={`item-${it.key}`} className="pb-6 sm:px-2">
+                          <div id={`item-${it.key}`} className="border-t border-line pt-4 pr-3 pb-6 pl-6">
                             {it.kind === "disagreement" ? (
                               <ConflictPoint
                                 bare
@@ -581,7 +582,7 @@ export function ProjectPage() {
                 </ul>
 
                 <details className="group mt-12">
-                  <summary className="flex items-center gap-2 py-2 font-heading text-lg font-medium [&::-webkit-details-marker]:hidden">
+                  <summary className="label flex min-h-11 items-center gap-2 border-y-2 border-fg py-2 font-semibold text-fg [&::-webkit-details-marker]:hidden">
                     <ChevronDown
                       className="size-5 -rotate-90 text-fg-muted transition-transform group-open:rotate-0"
                       aria-hidden
@@ -600,7 +601,7 @@ export function ProjectPage() {
 
         {step === "improve" && (
           <div>
-            <h2 className="text-[1.75rem]">Where the process could be better</h2>
+            <h2 className="macro text-[clamp(2rem,5vw,3.5rem)]">Where it could be better</h2>
             <p className="mt-2 mb-8 text-fg-muted">
               Read from the map's shape: work done by hand, handoffs, approvals.
             </p>

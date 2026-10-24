@@ -9,10 +9,20 @@ import { auth, setApiKey, verifyKey } from "@/lib/api"
 function Title() {
   return (
     <div className="mb-12">
-      <h1 className="text-[2.5rem] leading-[1.05] sm:text-[3.25rem]">
-        Transcript <span className="text-fg-muted">to</span> BPMN
+      <div className="label xmarks mb-8 flex justify-between border-y-2 border-fg py-1.5">
+        <span>/// Process mapping workspace</span>
+        <span className="text-fg-subtle">T2B® · BPMN 2.0</span>
+      </div>
+      <h1 className="macro text-[clamp(3rem,9vw,5.5rem)]">
+        Transcript
+        <span className="text-hazard" aria-hidden>
+          →
+        </span>
+        <span className="sr-only"> to </span>
+        <br />
+        BPMN
       </h1>
-      <p className="measure mt-4 text-xl leading-snug text-fg-muted">
+      <p className="measure mt-6 text-xl leading-snug text-fg-muted">
         Turn process interviews into BPMN maps. Every step links back to the words that described it.
       </p>
     </div>
@@ -22,12 +32,13 @@ function Title() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="flex min-h-svh flex-col bg-bg">
-      <div className="mx-auto flex w-full max-w-[560px] flex-1 flex-col justify-center px-6 py-16">
+      <div className="mx-auto flex w-full max-w-[600px] flex-1 flex-col justify-center px-6 py-16">
         <Title />
         {children}
       </div>
-      <footer className="border-t border-line px-6 py-4 text-center text-xs text-fg-muted">
-        BPMN 2.0 · exports for Camunda and Signavio
+      <footer className="flex items-center gap-4 border-t-2 border-fg px-6 py-3">
+        <div className="barcode w-24 shrink-0" aria-hidden />
+        <span className="label truncate">BPMN 2.0 · exports for Camunda and Signavio</span>
       </footer>
     </main>
   )

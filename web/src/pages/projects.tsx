@@ -131,7 +131,7 @@ export function Projects() {
         </p>
       ) : data.length === 0 ? (
         <div className="measure py-10">
-          <p className="font-heading text-2xl">No processes yet.</p>
+          <p className="macro text-[clamp(2rem,5vw,3rem)]">No processes yet</p>
           <p className="mt-2 text-fg-muted">
             Open a file for a process, then add a meeting transcript or recording. The map is drafted from what was
             said, and every step keeps a reference to the words behind it.
@@ -141,34 +141,44 @@ export function Projects() {
           </Button>
         </div>
       ) : (
-        <ul className="border-t border-line">
-          {data.map((p) => {
+        <ul className="border-t-2 border-fg">
+          {data.map((p, i) => {
             const needs = p.open_conflicts + p.open_policy_differences + p.open_gaps
             return (
-              <li key={p.id} className="border-b border-line">
+              <li key={p.id} className="border-b-2 border-fg">
                 <Link
                   to={`/projects/${p.id}`}
-                  className="transition-quiet group flex items-center gap-6 py-6 hover:bg-surface sm:px-3"
+                  className="transition-quiet group grid grid-cols-[auto_1fr_auto] items-center gap-x-5 py-5 hover:bg-surface sm:gap-x-8 sm:px-3"
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-heading text-[1.5rem] leading-tight font-semibold">
-                      {p.name}
-                    </span>
-                    <span className="tabular mt-1 block text-fg-muted">
+                  <span
+                    className="macro tabular text-[clamp(2rem,5vw,3.5rem)] text-fg-subtle group-hover:text-fg"
+                    aria-hidden
+                  >
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="macro block text-[clamp(1.35rem,3vw,2rem)] break-words">{p.name}</span>
+                    <span className="label tabular mt-2 block">
                       {countOf(p.transcripts.filter((t) => t.purpose === "meeting").length, "meeting")}
                       {p.revised_at ? ` · revised ${formatDay(p.revised_at)}` : " · no map yet"}
+                      <span className="text-fg-subtle">
+                        {" "}
+                        · P-{p.id.slice(0, 4).toUpperCase()}
+                        {p.map_version ? ` · REV ${p.map_version}` : ""}
+                      </span>
                     </span>
                   </span>
-                  <span className="text-right whitespace-nowrap">
+                  <span className="flex items-center gap-4">
                     {needs > 0 ? (
-                      <span className="font-semibold text-signal">
+                      <span className="label flex items-center gap-2 font-semibold whitespace-nowrap text-signal">
+                        <span className="stripes inline-block h-3 w-6" aria-hidden />
                         {needs} need{needs === 1 ? "s" : ""} you
                       </span>
                     ) : p.merged_map_id ? (
-                      <span className="text-fg-muted">All settled</span>
+                      <span className="label whitespace-nowrap">All settled</span>
                     ) : null}
+                    <ArrowRight className="size-6 shrink-0 text-fg" strokeWidth={2.5} aria-hidden />
                   </span>
-                  <ArrowRight className="size-5 shrink-0 text-fg-subtle group-hover:text-fg" aria-hidden />
                 </Link>
               </li>
             )
