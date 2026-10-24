@@ -192,21 +192,6 @@
   .stripes {
     background: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, var(--fg) 6px 12px);
   }
-  /* Barcode rule: a section divider. */
-  .barcode {
-    height: 12px;
-    background: repeating-linear-gradient(
-      90deg,
-      var(--fg) 0 2px,
-      transparent 2px 4px,
-      var(--fg) 4px 5px,
-      transparent 5px 8px,
-      var(--fg) 8px 11px,
-      transparent 11px 13px,
-      var(--fg) 13px 14px,
-      transparent 14px 18px
-    );
-  }
   /* Registration crosshairs on a compartment's top corners. */
   .xmarks {
     position: relative;

@@ -36,10 +36,6 @@ function Shell({ children }: { children: React.ReactNode }) {
         <Title />
         {children}
       </div>
-      <footer className="flex items-center gap-4 border-t-2 border-fg px-6 py-3">
-        <div className="barcode w-24 shrink-0" aria-hidden />
-        <span className="label truncate">BPMN 2.0 · exports for Camunda and Signavio</span>
-      </footer>
     </main>
   )
 }

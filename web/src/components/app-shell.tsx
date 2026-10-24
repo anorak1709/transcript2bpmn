@@ -143,13 +143,6 @@ export function AppShell() {
 /** Document page: 1120px measure with generous margins (MASTER: compact tables in airy pages). */
 export function Page({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("mx-auto w-full max-w-[1120px] px-4 pt-10 pb-20 sm:px-8 sm:pt-14", className)}>
-      {children}
-      <footer className="mt-24 flex items-center gap-4 border-t-2 border-fg pt-3" aria-hidden>
-        <div className="barcode w-28 shrink-0" />
-        <span className="label truncate text-fg-subtle">BPMN 2.0 /// Camunda · Signavio · Word · PDF</span>
-        <span className="label ml-auto shrink-0 text-fg-subtle">T2B®</span>
-      </footer>
-    </div>
+    <div className={cn("mx-auto w-full max-w-[1120px] px-4 pt-10 pb-20 sm:px-8 sm:pt-14", className)}>{children}</div>
   )
 }

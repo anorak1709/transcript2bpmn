@@ -49,7 +49,7 @@ Red means exactly three things: **needs you** (counts, stripes, review labels), 
 - Page header: a telemetry strip between two ink rules, with `+` registration marks on its corners. On the left, the
   back link or `///`; on the right, real data such as `UNIT / P-1388 · REV 2`.
 - ASCII framing: `[ SECTION ]`, `>>>`, `///`. The brackets and arrows are `aria-hidden`.
-- Hazard stripes (`.stripes`) appear only next to words that say "needs you". The barcode rule (`.barcode`) sits in the footer.
+- Hazard stripes (`.stripes`) appear only next to words that say "needs you". No page footer.
 - Texture: one fixed, 5%-opacity SVG grain over the page, with `pointer-events: none`. No scanlines or halftone; the
   user chose subtle.
 - Width: max 1120px, gutter 16px on phones and 32px from sm up. No horizontal scroll at 375px; checked. Phones show the
